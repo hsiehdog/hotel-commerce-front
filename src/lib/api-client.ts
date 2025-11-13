@@ -32,6 +32,17 @@ export type ChatMessage = {
   isOptimistic?: boolean;
 };
 
+type AIChatResponse = {
+  id?: string;
+  role?: "user" | "assistant" | "system";
+  text?: string;
+  prompt?: string;
+  response?: string;
+  sessionId?: string;
+  model?: string;
+  createdAt?: string;
+};
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 const isMock = !API_BASE_URL;
 
@@ -166,7 +177,13 @@ export async function fetchChatHistory(): Promise<ChatMessage[]> {
     return mockData.chat;
   }
 
-  return request<ChatMessage[]>("/chat/messages", "GET");
+  const response = await request<{ sessions: AIChatResponse[] }>(
+    "/users/me/sessions",
+    "GET",
+  );
+  return (response.sessions || [])
+    .sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime())
+    .flatMap((entry) => mapSessionToMessages(entry));
 }
 
 export async function sendChatMessage(message: string): Promise<ChatMessage> {
@@ -181,13 +198,15 @@ export async function sendChatMessage(message: string): Promise<ChatMessage> {
     };
   }
 
-  return request<ChatMessage>(
-    "/chat/messages",
+  const response = await request<{ data: AIChatResponse }>(
+    "/ai/generate",
     "POST",
     {
-      message,
+      prompt: message,
     },
   );
+
+  return mapToChatMessage(response.data);
 }
 
 export async function updateUserProfile(
@@ -210,6 +229,47 @@ export async function changeUserPassword(
   }
 
   await request("/users/me/change-password", "POST", payload);
+}
+
+function mapToChatMessage(
+  payload: AIChatResponse,
+  fallbackRole: ChatMessage["role"] = "assistant",
+): ChatMessage {
+  const content = payload.text ?? payload.response ?? payload.prompt ?? "";
+  return {
+    id: payload.id || crypto.randomUUID(),
+    role: payload.role || fallbackRole,
+    content,
+    createdAt: payload.createdAt || new Date().toISOString(),
+  };
+}
+
+function mapSessionToMessages(session: AIChatResponse): ChatMessage[] {
+  const messages: ChatMessage[] = [];
+  if (session.prompt) {
+    messages.push(
+      mapToChatMessage(
+        {
+          id: `${session.id || crypto.randomUUID()}-prompt`,
+          role: "user",
+          text: session.prompt,
+          createdAt: session.createdAt,
+        },
+        "user",
+      ),
+    );
+  }
+  messages.push(
+    mapToChatMessage(
+      {
+        id: `${session.id || crypto.randomUUID()}-response`,
+        text: session.response ?? session.text ?? "",
+        createdAt: session.createdAt,
+      },
+      "assistant",
+    ),
+  );
+  return messages;
 }
 export type UpdateUserPayload = {
   name?: string;

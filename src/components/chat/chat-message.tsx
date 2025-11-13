@@ -26,12 +26,23 @@ export function ChatMessageBubble({ message }: ChatMessageProps) {
       >
         <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
         <p className="mt-1 text-xs text-muted-foreground/80">
-          {new Date(message.createdAt).toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
+          {formatTimestamp(message.createdAt)}
         </p>
       </div>
     </div>
   );
+}
+
+function formatTimestamp(value?: string) {
+  if (!value) {
+    return "Just now";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return date.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }

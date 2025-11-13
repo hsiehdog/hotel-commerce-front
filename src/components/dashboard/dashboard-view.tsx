@@ -38,10 +38,9 @@ export function DashboardView() {
         </CardContent>
       </Card>
 
-      <MetricCards metrics={usageQuery.data} isLoading={usageQuery.isPending} />
-
-      <div className="grid gap-4 lg:grid-cols-3">
-        <div className="space-y-4 lg:col-span-2">
+      <div className="grid gap-4 lg:grid-cols-[2fr_1fr] lg:items-start">
+        <div className="space-y-4">
+          <MetricCards metrics={usageQuery.data} isLoading={usageQuery.isPending} />
           <ProjectsCard
             projects={projectQuery.data}
             isLoading={projectQuery.isPending}
@@ -51,7 +50,9 @@ export function DashboardView() {
             isLoading={activityQuery.isPending}
           />
         </div>
-        <ChatPanel />
+        <div className="space-y-4 lg:sticky lg:top-24">
+          <ChatPanel />
+        </div>
       </div>
     </div>
   );

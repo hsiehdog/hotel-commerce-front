@@ -91,11 +91,14 @@ export function ChatPanel() {
               entry.content === "Thinking…"
             ),
         );
-        return [...(next || []), assistantMessage];
+        const hydratedResponse: ChatMessage = {
+          id: crypto.randomUUID(),
+          createdAt: assistantMessage.createdAt || new Date().toISOString(),
+          role: assistantMessage.role || "assistant",
+          content: assistantMessage.content,
+        } as ChatMessage;
+        return [...(next || []), hydratedResponse];
       });
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["chat"] });
     },
   });
 
