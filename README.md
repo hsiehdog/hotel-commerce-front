@@ -40,6 +40,23 @@ Run the dev server with `pnpm dev`. The frontend talks to your backend-hosted Be
 - React Query powers data access (`src/components/providers.tsx`) and shares caches between the dashboard and chat.
 - UI primitives live in `src/components/ui/*` (shadcn) and higher-level building blocks live under `src/components`.
 
+## Offers demo dashboard (`/demo/offers`)
+
+Use this route to demo `POST /offers/generate` with full input control and explainability-focused output.
+
+1. Start the frontend with `pnpm dev`.
+2. Ensure your backend serves `POST /offers/generate`.
+3. If backend is on another origin, set `NEXT_PUBLIC_API_BASE_URL` in `.env.local` (for example `http://localhost:4000`).
+4. Open `http://localhost:3000/demo/offers`.
+5. Load a preset scenario, adjust inputs, then click **Generate Offers**.
+6. Review:
+   - `Summary` for selected offers and commercial details
+   - `Decision Trace` for reason codes/trace path
+   - `Debug Deep Dive` for resolved request, profile stages, and top-candidate scoring/risk contributors
+   - `Raw JSON` to copy exact request/response payloads
+
+The demo defaults to `debug: true` and supports advanced JSON overrides for future request contract changes.
+
 ## Available scripts
 
 | Script | Description |
