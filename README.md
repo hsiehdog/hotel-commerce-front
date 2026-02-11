@@ -48,6 +48,8 @@ Run the dev server with `pnpm dev`. The frontend talks to your backend-hosted Be
 | `pnpm build` | Create a production build |
 | `pnpm start` | Run the built app |
 | `pnpm lint` | Run ESLint |
+| `pnpm test` | Run Vitest once (jsdom + React Testing Library setup) |
+| `pnpm test:watch` | Run Vitest in watch mode |
 
 ## Next steps
 
