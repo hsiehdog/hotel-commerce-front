@@ -42,20 +42,36 @@ Run the dev server with `pnpm dev`. The frontend talks to your backend-hosted Be
 
 ## Offers demo dashboard (`/demo/offers`)
 
-Use this route to demo `POST /offers/generate` with full input control and explainability-focused output.
+Use this route to demo `POST /offers/generate` as a business-facing offer decision dashboard.
 
 1. Start the frontend with `pnpm dev`.
 2. Ensure your backend serves `POST /offers/generate`.
 3. If backend is on another origin, set `NEXT_PUBLIC_API_BASE_URL` in `.env.local` (for example `http://localhost:4000`).
 4. Open `http://localhost:3000/demo/offers`.
-5. Load a preset scenario, adjust inputs, then click **Generate Offers**.
-6. Review:
-   - `Summary` for selected offers and commercial details
-   - `Decision Trace` for reason codes/trace path
-   - `Debug Deep Dive` for resolved request, profile stages, and top-candidate scoring/risk contributors
-   - `Raw JSON` to copy exact request/response payloads
+5. Keep **Basic** mode for day-to-day demos:
+   - guest request inputs
+   - business-labeled presets (`Family stay`, `Late arrival`, `High-demand weekend`, `Price-sensitive guest`)
+   - quick date chips (`Tonight`, `Tomorrow`, `This weekend`, `Next weekend`)
+6. Expand **Advanced** only when needed:
+   - `Demo scenario (advanced)`
+   - `Raw JSON override`
+   - `Explainability mode` toggle (defaults to on)
+7. Click **Run Offer Decision**.
+8. Review top-down:
+   - `Offer decision` (primary recommendation, secondary tradeoff, risk/flexibility badges)
+   - `Why this was selected` (decision story + grouped reason codes)
+   - `Property context` (resolved property/currency/strategy/timezone/policies/capabilities)
+   - detailed tabs for `Why Panel`, `Debug Deep Dive`, and `Raw JSON`
 
-The demo defaults to `debug: true` and supports advanced JSON overrides for future request contract changes.
+### Screenshot notes
+
+Capture these screens for stakeholder walkthroughs:
+
+1. Basic mode request form with preset chips and quick date chips.
+2. Offer decision summary showing primary and secondary cards with SAFE/SAVER badges.
+3. Why panel and property context panel side-by-side.
+4. Debug Deep Dive candidate table with selected-row highlight.
+5. Raw JSON tab with request/response and copy bundle action.
 
 ## Available scripts
 

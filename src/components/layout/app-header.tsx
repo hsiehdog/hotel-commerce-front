@@ -73,7 +73,7 @@ export function AppHeader() {
             <Bell className="h-4 w-4" />
           </Button>
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
+            <DropdownMenuTrigger asChild id="user-menu-trigger">
               <Button
                 variant="ghost"
                 className="flex items-center gap-2 px-2"

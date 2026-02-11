@@ -3,13 +3,14 @@ import { describe, expect, it } from "vitest";
 import {
   buildOffersGenerateRequest,
   getDefaultOffersDraft,
+  groupReasonCodes,
   parseAdvancedJson,
   parseOffersResponse,
   validateOffersDraft,
 } from "@/lib/offers-demo";
 
 describe("offers demo request builder", () => {
-  it("builds request payload with nights and advanced fields", () => {
+  it("builds canonical top-level request payload", () => {
     const draft = {
       ...getDefaultOffersDraft(),
       property_id: "hotel-test-1",
@@ -40,6 +41,8 @@ describe("offers demo request builder", () => {
     expect(payload.nights).toBe(2);
     expect(payload.market_segment).toBe("family");
     expect(payload.debug).toBe(true);
+    expect((payload as Record<string, unknown>).request).toBeUndefined();
+    expect((payload as Record<string, unknown>).payload).toBeUndefined();
   });
 
   it("validates child age mismatch and invalid JSON", () => {
@@ -68,23 +71,29 @@ describe("offers demo request builder", () => {
 });
 
 describe("offers response parser", () => {
-  it("maps summary and offer fields from mixed backend key styles", () => {
+  it("maps summary, property context, and offer fields", () => {
     const parsed = parseOffersResponse({
       property_id: "hotel-9",
       channel: "agent",
       currency: "USD",
       price_basis_used: "LOS",
       config_version: "v2026.04.1",
+      strategy_mode: "balanced",
+      timezone: "America/New_York",
+      policies: ["ID required", "No smoking"],
       offers: [
         {
           offer_id: "offer-1",
           offerType: "best_value",
           isRecommended: true,
           room_type: "deluxe",
+          roomTypeDescription: "Top floor king",
           rate_plan: "flex",
-          pricing: { total: 320 },
+          pricing: { total: 320, paymentType: "pay_now" },
+          cancellationPolicy: { refundable: true },
         },
       ],
+      reason_codes: ["filter_inventory", "selection_best_margin", "fallback_waitlist"],
       debug: {
         topCandidates: [
           {
@@ -94,14 +103,171 @@ describe("offers response parser", () => {
             riskContributors: ["high_demand"],
           },
         ],
+        profileFinal: {
+          capabilities: {
+            text_link: true,
+            transfer: false,
+          },
+        },
       },
     });
 
     expect(parsed.propertyId).toBe("hotel-9");
     expect(parsed.priceBasisUsed).toBe("LOS");
     expect(parsed.configVersion).toBe("v2026.04.1");
+    expect(parsed.propertyContext.strategyMode).toBe("balanced");
+    expect(parsed.propertyContext.timezone).toBe("America/New_York");
+    expect(parsed.propertyContext.policies).toContain("ID required");
+    expect(parsed.propertyContext.capabilities).toContain("text_link: on");
     expect(parsed.offers[0]?.offerId).toBe("offer-1");
     expect(parsed.offers[0]?.recommended).toBe(true);
     expect(parsed.debug.topCandidates[0]?.offerId).toBe("offer-1");
+  });
+
+  it("groups reason codes for why panel", () => {
+    const groups = groupReasonCodes([
+      "filter_inventory",
+      "selection_best_margin",
+      "fallback_waitlist",
+      "misc_note",
+    ]);
+
+    expect(groups.filters).toEqual(["filter_inventory"]);
+    expect(groups.selection).toEqual(["selection_best_margin"]);
+    expect(groups.fallback).toEqual(["fallback_waitlist"]);
+    expect(groups.other).toEqual(["misc_note"]);
+  });
+
+  it("parses wrapped response envelopes", () => {
+    const parsed = parseOffersResponse({
+      data: {
+        property_id: "hotel-wrapped",
+        decision_trace: ["rule_a", "rule_b"],
+        selected_offers: [
+          {
+            offer_id: "offer-200",
+            recommended: true,
+            room_type: "Suite",
+            rate_plan: "flex",
+          },
+        ],
+        debug: {
+          top_candidates: [{ offer_id: "offer-200", score: 0.9 }],
+        },
+      },
+    });
+
+    expect(parsed.propertyId).toBe("hotel-wrapped");
+    expect(parsed.offers[0]?.offerId).toBe("offer-200");
+    expect(parsed.debug.topCandidates[0]?.offer_id).toBe("offer-200");
+  });
+
+  it("extracts property context from nested snake_case debug shapes", () => {
+    const parsed = parseOffersResponse({
+      data: {
+        property_id: "hotel-nested",
+        offers: [{ offer_id: "offer-1", recommended: true }],
+        debug: {
+          profile_final: {
+            strategy_mode: "protective",
+            time_zone: "Asia/Tokyo",
+            stay_policies: [
+              { summary: "No same-day cancellation" },
+              "ID check at desk",
+            ],
+            fallback_capabilities: {
+              text_link: true,
+              transfer: false,
+              waitlist: {
+                enabled: true,
+                modes: ["sms", "email"],
+              },
+            },
+          },
+        },
+      },
+    });
+
+    expect(parsed.propertyContext.strategyMode).toBe("protective");
+    expect(parsed.propertyContext.timezone).toBe("Asia/Tokyo");
+    expect(parsed.propertyContext.policies).toContain("No same-day cancellation");
+    expect(parsed.propertyContext.policies).toContain("ID check at desk");
+    expect(parsed.propertyContext.capabilities).toContain("text_link: on");
+    expect(parsed.propertyContext.capabilities).toContain("transfer: off");
+    expect(parsed.propertyContext.capabilities).toContain("waitlist.enabled: on");
+    expect(parsed.propertyContext.capabilities).toContain("waitlist.modes: sms, email");
+  });
+
+  it("reads strategy mode from debug.resolvedRequest", () => {
+    const parsed = parseOffersResponse({
+      data: {
+        propertyId: "inn_at_mount_shasta",
+        offers: [{ offerId: "off_safe_business", recommended: true }],
+        debug: {
+          resolvedRequest: {
+            strategyMode: "balanced",
+          },
+        },
+      },
+    });
+
+    expect(parsed.propertyContext.strategyMode).toBe("balanced");
+  });
+
+  it("maps roomType/ratePlan objects and debug reason codes from demo payload shape", () => {
+    const parsed = parseOffersResponse({
+      data: {
+        propertyId: "inn_at_mount_shasta",
+        channel: "voice",
+        currency: "USD",
+        priceBasisUsed: "afterTax",
+        offers: [
+          {
+            offerId: "off_safe_business",
+            type: "SAFE",
+            recommended: true,
+            roomType: {
+              id: "rt_king",
+              name: "King Room",
+              description: "King description",
+              features: ["WiFi", "Parking"],
+            },
+            ratePlan: {
+              id: "rp_flex",
+              name: "Flexible",
+            },
+            policy: {
+              refundability: "refundable",
+              paymentTiming: "pay_at_property",
+              cancellationSummary: "Free cancellation up to 24 hours before arrival.",
+            },
+            pricing: {
+              basis: "afterTax",
+              total: 383.04,
+            },
+          },
+        ],
+        debug: {
+          reasonCodes: ["SELECT_PRIMARY_SAFE"],
+          topCandidates: [
+            {
+              roomTypeId: "rt_king",
+              ratePlanId: "rp_flex",
+              basis: "afterTax",
+              totalPrice: 383.04,
+              scoreTotal: 57.9,
+              components: { valueScore: 81 },
+            },
+          ],
+        },
+      },
+    });
+
+    expect(parsed.offers[0]?.room).toBe("King Room");
+    expect(parsed.offers[0]?.ratePlan).toBe("Flexible");
+    expect(parsed.offers[0]?.cancellationSummary).toContain("Free cancellation");
+    expect(parsed.offers[0]?.paymentSummary).toBe("pay_at_property");
+    expect(parsed.reasonCodes).toContain("SELECT_PRIMARY_SAFE");
+    expect(parsed.debug.topCandidates[0]?.scoreTotal).toBe(57.9);
   });
 });

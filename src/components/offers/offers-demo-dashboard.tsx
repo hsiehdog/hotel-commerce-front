@@ -11,10 +11,16 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   OffersDraft,
   OffersRequestError,
+  ParsedOfferCard,
   ParsedOffersResponse,
+  buildDeltaLine,
   buildOffersGenerateRequest,
   compareRuns,
+  getComputedNights,
   getDefaultOffersDraft,
+  getPrimaryOffer,
+  getSecondaryOffer,
+  groupReasonCodes,
   parseAdvancedJson,
   parseOffersResponse,
   requestOfferGeneration,
@@ -22,18 +28,18 @@ import {
   validateOffersDraft,
 } from "@/lib/offers-demo";
 
-type DashboardTab = "summary" | "trace" | "debug" | "raw";
+type DashboardTab = "why" | "debug" | "raw";
 
 const tabs: Array<{ id: DashboardTab; label: string }> = [
-  { id: "summary", label: "Summary" },
-  { id: "trace", label: "Decision Trace" },
+  { id: "why", label: "Why Panel" },
   { id: "debug", label: "Debug Deep Dive" },
   { id: "raw", label: "Raw JSON" },
 ];
 
 export function OffersDemoDashboard() {
   const [draft, setDraft] = useState<OffersDraft>(getDefaultOffersDraft());
-  const [activeTab, setActiveTab] = useState<DashboardTab>("summary");
+  const [isAdvanced, setIsAdvanced] = useState(false);
+  const [activeTab, setActiveTab] = useState<DashboardTab>("why");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formErrors, setFormErrors] = useState<string[]>([]);
   const [apiError, setApiError] = useState<string | null>(null);
@@ -44,12 +50,21 @@ export function OffersDemoDashboard() {
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
 
   const advancedJson = useMemo(() => parseAdvancedJson(draft.extraJson), [draft.extraJson]);
+  const computedNights = useMemo(
+    () => getComputedNights(draft.check_in, draft.check_out),
+    [draft.check_in, draft.check_out],
+  );
   const runComparison = useMemo(() => {
     if (!parsedResponse) {
       return null;
     }
     return compareRuns(previousResponse, parsedResponse);
   }, [previousResponse, parsedResponse]);
+
+  const primaryOffer = parsedResponse ? getPrimaryOffer(parsedResponse.offers) : null;
+  const secondaryOffer = parsedResponse ? getSecondaryOffer(parsedResponse.offers) : null;
+  const deltaLine = buildDeltaLine(primaryOffer, secondaryOffer);
+  const reasonGroups = groupReasonCodes(parsedResponse?.reasonCodes ?? []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -73,15 +88,13 @@ export function OffersDemoDashboard() {
       setPreviousResponse(parsedResponse);
       setParsedResponse(parsed);
       setRawResponse(response);
-      setActiveTab("summary");
+      setActiveTab("why");
     } catch (error) {
       if (error instanceof OffersRequestError) {
-        setApiError(
-          `Request failed (${error.status}): ${error.message}`,
-        );
+        setApiError(`Request failed (${error.status}): ${error.message}`);
         setRawResponse(error.body);
       } else {
-        setApiError("Network or server error while generating offers.");
+        setApiError("Network or server error while running offer decision.");
       }
     } finally {
       setIsSubmitting(false);
@@ -104,7 +117,35 @@ export function OffersDemoDashboard() {
       extraJson: preset.extraJson ? JSON.stringify(preset.extraJson, null, 2) : "",
     }));
     setFormErrors([]);
+    setApiError(null);
     setCopyMessage(null);
+  }
+
+  function applyQuickDate(kind: "tonight" | "tomorrow" | "this-weekend" | "next-weekend") {
+    const now = new Date();
+    let checkIn = addDays(now, 0);
+    let checkOut = addDays(now, 1);
+
+    if (kind === "tomorrow") {
+      checkIn = addDays(now, 1);
+      checkOut = addDays(now, 2);
+    }
+
+    if (kind === "this-weekend") {
+      checkIn = getUpcomingWeekendStart(now, 0);
+      checkOut = addDays(checkIn, 2);
+    }
+
+    if (kind === "next-weekend") {
+      checkIn = getUpcomingWeekendStart(now, 7);
+      checkOut = addDays(checkIn, 2);
+    }
+
+    setDraft((prev) => ({
+      ...prev,
+      check_in: toIsoDate(checkIn),
+      check_out: toIsoDate(checkOut),
+    }));
   }
 
   async function copyJson(label: string, value: unknown) {
@@ -115,6 +156,20 @@ export function OffersDemoDashboard() {
 
     await navigator.clipboard.writeText(JSON.stringify(value, null, 2));
     setCopyMessage(`${label} copied to clipboard.`);
+  }
+
+  async function copyBundle() {
+    if (!requestPayload || !rawResponse) {
+      return;
+    }
+
+    const bundle = {
+      timestamp: new Date().toISOString(),
+      request: requestPayload,
+      response: rawResponse,
+    };
+
+    await copyJson("Request/response bundle", bundle);
   }
 
   function handleChildrenChange(value: string) {
@@ -161,45 +216,57 @@ export function OffersDemoDashboard() {
 
   return (
     <div className="space-y-6">
-      <Card className="border-muted bg-gradient-to-br from-background via-background to-muted/30">
-        <CardHeader>
-          <CardTitle className="text-2xl">Offers Generate Demo Dashboard</CardTitle>
-          <CardDescription>
-            Explainability-first sandbox for <code>/offers/generate</code>. This page sends a real request and keeps <code>debug=true</code> by default.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-wrap gap-2">
-            {scenarioPresets.map((preset) => (
-              <Button
-                key={preset.id}
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={() => applyPreset(preset.id)}
-                title={preset.description}
-              >
-                {preset.label}
-              </Button>
-            ))}
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Use presets to quickly run Family trip, Late arrival, Compression weekend, Currency mismatch, and Agent upsell flows.
-          </p>
-        </CardContent>
-      </Card>
-
       <form className="space-y-6" onSubmit={handleSubmit}>
-        <Card>
+        <Card className="border-muted bg-gradient-to-br from-background via-background to-muted/30">
           <CardHeader>
-            <CardTitle>Input Controls</CardTitle>
-            <CardDescription>
-              Full request coverage plus advanced JSON for forward compatibility.
-            </CardDescription>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <CardTitle className="text-2xl">Guest request</CardTitle>
+                <CardDescription>
+                  Business-facing offer decision dashboard for <code>/offers/generate</code>.
+                </CardDescription>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={!isAdvanced ? "default" : "outline"}
+                  onClick={() => setIsAdvanced(false)}
+                >
+                  Basic
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={isAdvanced ? "default" : "outline"}
+                  onClick={() => setIsAdvanced(true)}
+                >
+                  Advanced
+                </Button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="space-y-6">
             <section className="space-y-3">
-              <h3 className="text-sm font-semibold">Property + Channel</h3>
+              <p className="text-sm font-semibold">Preset scenarios</p>
+              <div className="flex flex-wrap gap-2">
+                {scenarioPresets.map((preset) => (
+                  <Button
+                    key={preset.id}
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => applyPreset(preset.id)}
+                    title={preset.description}
+                  >
+                    {preset.label}
+                  </Button>
+                ))}
+              </div>
+            </section>
+
+            <section className="space-y-3">
+              <h3 className="text-sm font-semibold">Guest request details</h3>
               <div className="grid gap-4 md:grid-cols-3">
                 <div className="space-y-2">
                   <Label htmlFor="property_id">property_id</Label>
@@ -209,7 +276,6 @@ export function OffersDemoDashboard() {
                     onChange={(event) =>
                       setDraft((prev) => ({ ...prev, property_id: event.target.value }))
                     }
-                    placeholder="hotel-demo-001"
                   />
                 </div>
                 <div className="space-y-2">
@@ -238,14 +304,38 @@ export function OffersDemoDashboard() {
                     onChange={(event) =>
                       setDraft((prev) => ({ ...prev, currency: event.target.value.toUpperCase() }))
                     }
-                    placeholder="USD"
                   />
                 </div>
               </div>
-            </section>
 
-            <section className="space-y-3">
-              <h3 className="text-sm font-semibold">Basic Trip Inputs</h3>
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">Quick stay dates</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" size="sm" variant="outline" onClick={() => applyQuickDate("tonight")}>
+                    Tonight
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" onClick={() => applyQuickDate("tomorrow")}>
+                    Tomorrow
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => applyQuickDate("this-weekend")}
+                  >
+                    This weekend
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => applyQuickDate("next-weekend")}
+                  >
+                    Next weekend
+                  </Button>
+                </div>
+              </div>
+
               <div className="grid gap-4 md:grid-cols-4">
                 <div className="space-y-2">
                   <Label htmlFor="check_in">check_in</Label>
@@ -270,33 +360,6 @@ export function OffersDemoDashboard() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="nights">nights (optional)</Label>
-                  <Input
-                    id="nights"
-                    type="number"
-                    min={1}
-                    value={draft.nights}
-                    onChange={(event) =>
-                      setDraft((prev) => ({ ...prev, nights: event.target.value }))
-                    }
-                    placeholder="auto"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="stub_scenario">stub_scenario</Label>
-                  <Input
-                    id="stub_scenario"
-                    value={draft.stub_scenario}
-                    onChange={(event) =>
-                      setDraft((prev) => ({ ...prev, stub_scenario: event.target.value }))
-                    }
-                    placeholder="family_space_priority"
-                  />
-                </div>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-3">
-                <div className="space-y-2">
                   <Label htmlFor="rooms">rooms</Label>
                   <Input
                     id="rooms"
@@ -318,6 +381,9 @@ export function OffersDemoDashboard() {
                     }
                   />
                 </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-3">
                 <div className="space-y-2">
                   <Label htmlFor="children">children</Label>
                   <Input
@@ -327,6 +393,25 @@ export function OffersDemoDashboard() {
                     value={draft.children}
                     onChange={(event) => handleChildrenChange(event.target.value)}
                   />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="nights">nights override (optional)</Label>
+                  <Input
+                    id="nights"
+                    type="number"
+                    min={1}
+                    value={draft.nights}
+                    onChange={(event) =>
+                      setDraft((prev) => ({ ...prev, nights: event.target.value }))
+                    }
+                    placeholder="auto"
+                  />
+                </div>
+                <div className="rounded-md border bg-muted/20 p-3">
+                  <p className="text-xs text-muted-foreground">Computed nights</p>
+                  <p className="mt-1 font-medium">
+                    {computedNights === null ? "Select valid dates" : `${computedNights} night(s)`}
+                  </p>
                 </div>
               </div>
 
@@ -352,11 +437,14 @@ export function OffersDemoDashboard() {
                       }}
                     />
                   ))}
+                  {draft.child_ages.length === 0 && (
+                    <p className="text-xs text-muted-foreground">No children entered.</p>
+                  )}
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label>roomOccupancies</Label>
+                <Label>Guests per room</Label>
                 <div className="space-y-2">
                   {draft.roomOccupancies.map((occupancy, index) => (
                     <div key={`occupancy-${index}`} className="grid gap-2 sm:grid-cols-3">
@@ -408,11 +496,8 @@ export function OffersDemoDashboard() {
                   Columns are room label, adults, then children.
                 </p>
               </div>
-            </section>
 
-            <section className="space-y-3">
-              <h3 className="text-sm font-semibold">Advanced Inputs</h3>
-              <div className="grid gap-4 md:grid-cols-3">
+              <div className="grid gap-4 md:grid-cols-2">
                 <label className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
@@ -447,31 +532,50 @@ export function OffersDemoDashboard() {
                   />
                   preferences.late_arrival
                 </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={draft.debug}
-                    onChange={(event) =>
-                      setDraft((prev) => ({ ...prev, debug: event.target.checked }))
-                    }
-                    className="h-4 w-4 rounded border-input"
-                  />
-                  debug (default true)
-                </label>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="extra-json">Advanced JSON override (object only)</Label>
-                <Textarea
-                  id="extra-json"
-                  value={draft.extraJson}
-                  onChange={(event) =>
-                    setDraft((prev) => ({ ...prev, extraJson: event.target.value }))
-                  }
-                  placeholder='{"market_segment":"corporate","force_fallback":true}'
-                  className="min-h-32 font-mono text-xs"
-                />
               </div>
             </section>
+
+            {isAdvanced && (
+              <section className="space-y-3 rounded-md border bg-muted/10 p-4">
+                <h3 className="text-sm font-semibold">Advanced controls</h3>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="stub_scenario">Demo scenario (advanced)</Label>
+                    <Input
+                      id="stub_scenario"
+                      value={draft.stub_scenario}
+                      onChange={(event) =>
+                        setDraft((prev) => ({ ...prev, stub_scenario: event.target.value }))
+                      }
+                      placeholder="price_sensitive_guest"
+                    />
+                  </div>
+                  <label className="flex items-center gap-2 self-end text-sm">
+                    <input
+                      type="checkbox"
+                      checked={draft.debug}
+                      onChange={(event) =>
+                        setDraft((prev) => ({ ...prev, debug: event.target.checked }))
+                      }
+                      className="h-4 w-4 rounded border-input"
+                    />
+                    Explainability mode
+                  </label>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="extra-json">Raw JSON override (object)</Label>
+                  <Textarea
+                    id="extra-json"
+                    value={draft.extraJson}
+                    onChange={(event) =>
+                      setDraft((prev) => ({ ...prev, extraJson: event.target.value }))
+                    }
+                    placeholder='{"market_segment":"corporate","force_fallback":true}'
+                    className="min-h-32 font-mono text-xs"
+                  />
+                </div>
+              </section>
+            )}
 
             {formErrors.length > 0 && (
               <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
@@ -484,9 +588,15 @@ export function OffersDemoDashboard() {
               </div>
             )}
 
+            {apiError && (
+              <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+                {apiError}
+              </div>
+            )}
+
             <div className="flex flex-wrap gap-2">
               <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Generating..." : "Generate Offers"}
+                {isSubmitting ? "Running..." : "Run Offer Decision"}
               </Button>
               <Button
                 type="button"
@@ -497,25 +607,117 @@ export function OffersDemoDashboard() {
                   setApiError(null);
                 }}
               >
-                Reset Form
+                Reset request
               </Button>
             </div>
-
-            {apiError && (
-              <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
-                {apiError}
-              </div>
-            )}
           </CardContent>
         </Card>
       </form>
 
       <Card>
         <CardHeader>
-          <CardTitle>Response Explorer</CardTitle>
+          <CardTitle>Offer decision</CardTitle>
           <CardDescription>
-            Explain why offers were selected, inspect debug scoring/risk contributors, and copy raw payloads for stakeholder follow-up.
+            Primary recommendation first, tradeoff option second, with clear risk and flexibility signals.
           </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {!parsedResponse ? (
+            <p className="text-sm text-muted-foreground">
+              Run an offer decision to see recommendation, tradeoff, and explainability details.
+            </p>
+          ) : (
+            <>
+              <div className="grid gap-4 lg:grid-cols-2">
+                <DecisionOfferCard title="Primary recommendation" offer={primaryOffer} highlighted />
+                <DecisionOfferCard title="Secondary option" offer={secondaryOffer} highlighted={false} />
+              </div>
+
+              <div className="rounded-md border border-amber-300/70 bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+                <p className="font-medium">Tradeoff signal</p>
+                <p>{deltaLine}</p>
+              </div>
+
+              {runComparison && (
+                <div className="rounded-md border p-3 text-sm">
+                  <p className="font-medium">Compared with previous run</p>
+                  <p>Added offers: {runComparison.changedOfferIds.added.join(", ") || "none"}</p>
+                  <p>Removed offers: {runComparison.changedOfferIds.removed.join(", ") || "none"}</p>
+                  {runComparison.summaryChanges.map((change) => (
+                    <p key={change}>{change}</p>
+                  ))}
+                  {runComparison.summaryChanges.length === 0 &&
+                    runComparison.changedOfferIds.added.length === 0 &&
+                    runComparison.changedOfferIds.removed.length === 0 && <p>No key differences.</p>}
+                </div>
+              )}
+
+              <div className="grid gap-4 lg:grid-cols-2">
+                <Card className="gap-3 py-4">
+                  <CardHeader>
+                    <CardTitle className="text-base">Why this was selected</CardTitle>
+                    <CardDescription>
+                      Human-readable decision path, reason groups, and matched cancellation summary.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4 text-sm">
+                    <p>{renderDecisionTrace(parsedResponse.decisionTrace)}</p>
+                    <ReasonGroup label="Filters applied" codes={reasonGroups.filters} />
+                    <ReasonGroup label="Selection decisions" codes={reasonGroups.selection} />
+                    <ReasonGroup label="Fallback decisions" codes={reasonGroups.fallback} />
+                    <ReasonGroup label="Other reasons" codes={reasonGroups.other} />
+
+                    <div>
+                      <p className="mb-2 text-xs font-medium text-muted-foreground">Matched cancellation policy summary</p>
+                      {parsedResponse.offers.map((offer) => (
+                        <p key={`policy-${offer.offerId}`}>
+                          {offer.offerId}: {offer.cancellationSummary}
+                        </p>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="gap-3 py-4">
+                  <CardHeader>
+                    <CardTitle className="text-base">Property context</CardTitle>
+                    <CardDescription>
+                      Resolved property configuration and fallback capabilities used during decisioning.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-2 text-sm">
+                    <p>Resolved propertyId: {parsedResponse.propertyContext.propertyId}</p>
+                    <p>Currency: {parsedResponse.propertyContext.currency}</p>
+                    <p>Strategy mode: {parsedResponse.propertyContext.strategyMode}</p>
+                    <p>Timezone: {parsedResponse.propertyContext.timezone}</p>
+                    <p className="pt-2 text-xs font-medium text-muted-foreground">Stay policies/disclosures</p>
+                    {parsedResponse.propertyContext.policies.length > 0 ? (
+                      parsedResponse.propertyContext.policies.map((policy) => (
+                        <p key={policy}>{policy}</p>
+                      ))
+                    ) : (
+                      <p className="text-muted-foreground">No explicit policies returned.</p>
+                    )}
+                    <p className="pt-2 text-xs font-medium text-muted-foreground">Capability flags</p>
+                    {parsedResponse.propertyContext.capabilities.length > 0 ? (
+                      parsedResponse.propertyContext.capabilities.map((capability) => (
+                        <p key={capability}>{capability}</p>
+                      ))
+                    ) : (
+                      <p className="text-muted-foreground">No capability flags returned.</p>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Decision details</CardTitle>
+          <CardDescription>Use tabs for explainability drill-down and stakeholder-ready raw data exports.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap gap-2">
@@ -533,94 +735,13 @@ export function OffersDemoDashboard() {
           </div>
 
           {!parsedResponse ? (
-            <p className="text-sm text-muted-foreground">
-              Submit a request to view summary, decision trace, and debug explainability panels.
-            </p>
+            <p className="text-sm text-muted-foreground">No decision data yet.</p>
           ) : (
             <>
-              {activeTab === "summary" && (
-                <div className="space-y-4">
-                  <div className="grid gap-3 md:grid-cols-5">
-                    <SummaryMetric label="propertyId" value={parsedResponse.propertyId} />
-                    <SummaryMetric label="channel" value={parsedResponse.channel} />
-                    <SummaryMetric label="currency" value={parsedResponse.currency} />
-                    <SummaryMetric label="priceBasisUsed" value={parsedResponse.priceBasisUsed} />
-                    <SummaryMetric label="configVersion" value={parsedResponse.configVersion} />
-                  </div>
-
-                  {runComparison && (
-                    <Card className="gap-3 py-4">
-                      <CardHeader>
-                        <CardTitle className="text-base">Compare With Last Run</CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-2 text-sm">
-                        <p>
-                          Added offers: {runComparison.changedOfferIds.added.join(", ") || "none"}
-                        </p>
-                        <p>
-                          Removed offers: {runComparison.changedOfferIds.removed.join(", ") || "none"}
-                        </p>
-                        {runComparison.summaryChanges.map((change) => (
-                          <p key={change}>{change}</p>
-                        ))}
-                        {runComparison.summaryChanges.length === 0 &&
-                          runComparison.changedOfferIds.added.length === 0 &&
-                          runComparison.changedOfferIds.removed.length === 0 && (
-                            <p>No key summary differences.</p>
-                          )}
-                      </CardContent>
-                    </Card>
-                  )}
-
-                  <div className="grid gap-4 lg:grid-cols-2">
-                    {parsedResponse.offers.map((offer) => (
-                      <Card key={offer.offerId} className="gap-4 py-4">
-                        <CardHeader>
-                          <div className="flex items-center justify-between gap-2">
-                            <CardTitle className="text-base">{offer.offerId}</CardTitle>
-                            <div className="flex gap-2">
-                              <Badge variant={offer.recommended ? "default" : "outline"}>
-                                {offer.recommended ? "recommended" : "candidate"}
-                              </Badge>
-                              <Badge variant="secondary">{offer.type}</Badge>
-                            </div>
-                          </div>
-                          <CardDescription>
-                            room: {offer.room} | ratePlan: {offer.ratePlan}
-                          </CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-2 text-sm">
-                          <JsonBlock label="policy" value={offer.policy} />
-                          <JsonBlock label="pricing" value={offer.pricing} />
-                          <JsonBlock label="enhancements" value={offer.enhancements} />
-                          <JsonBlock label="disclosures" value={offer.disclosures} />
-                          <JsonBlock label="urgency" value={offer.urgency} />
-                        </CardContent>
-                      </Card>
-                    ))}
-                    {parsedResponse.offers.length === 0 && (
-                      <p className="text-sm text-muted-foreground">No offers returned.</p>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {activeTab === "trace" && (
-                <div className="space-y-4">
-                  <div>
-                    <p className="mb-2 text-sm font-medium">reasonCodes</p>
-                    <div className="flex flex-wrap gap-2">
-                      {parsedResponse.reasonCodes.map((code) => (
-                        <Badge key={code} variant="outline">
-                          {code}
-                        </Badge>
-                      ))}
-                      {parsedResponse.reasonCodes.length === 0 && (
-                        <p className="text-sm text-muted-foreground">No reason codes present.</p>
-                      )}
-                    </div>
-                  </div>
-                  <JsonPanel title="decisionTrace" value={parsedResponse.decisionTrace} />
+              {activeTab === "why" && (
+                <div className="space-y-3">
+                  <JsonPanel title="Decision trace (raw)" value={parsedResponse.decisionTrace} />
+                  <JsonPanel title="Selection summary (debug)" value={parsedResponse.debug.selectionSummary} />
                 </div>
               )}
 
@@ -629,45 +750,93 @@ export function OffersDemoDashboard() {
                   <JsonPanel title="debug.resolvedRequest" value={parsedResponse.debug.resolvedRequest} />
                   <JsonPanel title="debug.profilePreAri" value={parsedResponse.debug.profilePreAri} />
                   <JsonPanel title="debug.profileFinal" value={parsedResponse.debug.profileFinal} />
-                  <JsonPanel title="debug.selectionSummary" value={parsedResponse.debug.selectionSummary} />
 
                   <Card className="gap-3 py-4">
                     <CardHeader>
-                      <CardTitle className="text-base">debug.topCandidates</CardTitle>
+                      <CardTitle className="text-base">Top candidates table</CardTitle>
                       <CardDescription>
-                        Scoring components and risk contributors for explainability.
+                        Candidate room context, pricing basis, risk contributors, and score composition.
                       </CardDescription>
                     </CardHeader>
-                    <CardContent className="space-y-3">
-                      {parsedResponse.debug.topCandidates.map((candidate, index) => (
-                        <div key={`candidate-${index}`} className="rounded-md border p-3 text-sm">
-                          <p className="font-medium">
-                            {String(candidate.offerId ?? candidate.offer_id ?? `candidate-${index + 1}`)}
-                          </p>
-                          <p>score: {String(candidate.score ?? candidate.totalScore ?? "-")}</p>
-                          <JsonBlock
-                            label="score components"
-                            value={
-                              candidate.scoreComponents ??
-                              candidate.scoringComponents ??
-                              candidate.components ??
-                              null
-                            }
-                          />
-                          <JsonBlock
-                            label="risk contributors"
-                            value={
-                              candidate.riskContributors ??
-                              candidate.risk_factors ??
-                              candidate.risks ??
-                              null
-                            }
-                          />
-                        </div>
-                      ))}
-                      {parsedResponse.debug.topCandidates.length === 0 && (
-                        <p className="text-sm text-muted-foreground">No topCandidates returned.</p>
-                      )}
+                    <CardContent>
+                      <div className="overflow-x-auto">
+                        <table className="w-full min-w-[760px] text-left text-sm">
+                          <thead>
+                            <tr className="border-b text-xs text-muted-foreground">
+                              <th className="px-2 py-2">Candidate</th>
+                              <th className="px-2 py-2">Room</th>
+                              <th className="px-2 py-2">Description</th>
+                              <th className="px-2 py-2">Features</th>
+                              <th className="px-2 py-2">Price</th>
+                              <th className="px-2 py-2">Risk</th>
+                              <th className="px-2 py-2">Score</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {parsedResponse.debug.topCandidates.map((candidate, index) => {
+                              const candidateId = toString(
+                                candidate.offerId ?? candidate.offer_id,
+                              );
+                              const candidateLabel = candidateId || String(index + 1);
+                              const selected = isSelectedCandidate(candidate, parsedResponse);
+
+                              return (
+                                <tr
+                                  key={`candidate-${candidateLabel}-${index}`}
+                                  className={selected ? "bg-emerald-100/50 dark:bg-emerald-900/30" : ""}
+                                >
+                                  <td className="px-2 py-2">
+                                    <div className="flex items-center gap-2">
+                                      <span>{candidateLabel}</span>
+                                      {selected && <Badge>Selected</Badge>}
+                                    </div>
+                                  </td>
+                                  <td className="px-2 py-2">
+                                    {String(candidate.roomTypeName ?? candidate.roomType ?? "-")}
+                                  </td>
+                                  <td className="px-2 py-2">
+                                    {String(candidate.roomTypeDescription ?? "-")}
+                                  </td>
+                                  <td className="px-2 py-2">
+                                    <CandidateChips value={candidate.features ?? candidate.featureFlags ?? []} />
+                                  </td>
+                                  <td className="px-2 py-2">
+                                    {String(candidate.priceBasis ?? candidate.price_basis ?? candidate.basis ?? "-")} / {String(candidate.total ?? candidate.totalPrice ?? "-")}
+                                  </td>
+                                  <td className="px-2 py-2">
+                                    <CandidateChips
+                                      value={
+                                        candidate.riskContributors ??
+                                        candidate.risk_factors ??
+                                        candidate.risks ??
+                                        []
+                                      }
+                                    />
+                                  </td>
+                                  <td className="px-2 py-2">
+                                    <div>{String(candidate.score ?? candidate.totalScore ?? candidate.scoreTotal ?? "-")}</div>
+                                    <pre className="mt-1 whitespace-pre-wrap rounded border bg-muted/20 p-1 font-mono text-[10px]">
+                                      {safeStringify(
+                                        candidate.scoreComponents ??
+                                          candidate.scoringComponents ??
+                                          candidate.components ??
+                                          null,
+                                      )}
+                                    </pre>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                            {parsedResponse.debug.topCandidates.length === 0 && (
+                              <tr>
+                                <td className="px-2 py-3 text-muted-foreground" colSpan={7}>
+                                  No topCandidates returned.
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
                     </CardContent>
                   </Card>
                 </div>
@@ -694,12 +863,21 @@ export function OffersDemoDashboard() {
                     >
                       Copy response JSON
                     </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={copyBundle}
+                      disabled={!requestPayload || !rawResponse}
+                    >
+                      Copy bundle
+                    </Button>
                   </div>
 
                   {copyMessage && <p className="text-xs text-muted-foreground">{copyMessage}</p>}
 
                   <JsonPanel title="Request payload sent" value={requestPayload} />
-                  <JsonPanel title="Raw response received" value={rawResponse} />
+                  <JsonPanel title="Raw response payload" value={rawResponse} />
                 </div>
               )}
             </>
@@ -710,11 +888,90 @@ export function OffersDemoDashboard() {
   );
 }
 
-function SummaryMetric({ label, value }: { label: string; value: string }) {
+function DecisionOfferCard({
+  title,
+  offer,
+  highlighted,
+}: {
+  title: string;
+  offer: ParsedOfferCard | null;
+  highlighted: boolean;
+}) {
+  if (!offer) {
+    return (
+      <Card className="gap-3 py-4">
+        <CardHeader>
+          <CardTitle className="text-base">{title}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">No offer available.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const tier = offer.recommended ? "SAFE" : "SAVER";
+  const flexibility = offer.cancellationSummary.toLowerCase().includes("non")
+    ? "Non-refundable"
+    : "Refundable";
+  const payment = normalizePayment(offer.paymentSummary);
+
   return (
-    <div className="rounded-md border p-3">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="mt-1 font-medium">{value || "-"}</p>
+    <Card className={highlighted ? "border-emerald-300/70 bg-emerald-50/60 dark:bg-emerald-950/30" : ""}>
+      <CardHeader>
+        <CardTitle className="text-base">{title}</CardTitle>
+        <CardDescription>
+          {offer.offerId} | {offer.room} | {offer.ratePlan}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3 text-sm">
+        <div className="flex flex-wrap gap-2">
+          <Badge className={tier === "SAFE" ? "bg-emerald-600 text-white" : "bg-amber-500 text-white"}>{tier}</Badge>
+          <Badge variant="outline">{flexibility}</Badge>
+          <Badge variant="secondary">{payment}</Badge>
+        </div>
+        <p>Risk & flexibility: {offer.cancellationSummary}</p>
+        <p>Fallback action: {safeStringify(offer.urgency)}</p>
+        <p>Total: {offer.totalPrice === null ? "n/a" : `$${offer.totalPrice.toFixed(2)}`}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ReasonGroup({ label, codes }: { label: string; codes: string[] }) {
+  return (
+    <div>
+      <p className="mb-2 text-xs font-medium text-muted-foreground">{label}</p>
+      <div className="flex flex-wrap gap-2">
+        {codes.map((code) => (
+          <Badge key={`${label}-${code}`} variant="outline">
+            {code}
+          </Badge>
+        ))}
+        {codes.length === 0 && <span className="text-muted-foreground">None</span>}
+      </div>
+    </div>
+  );
+}
+
+function CandidateChips({ value }: { value: unknown }) {
+  const list = Array.isArray(value)
+    ? value.map((item) => String(item)).filter(Boolean)
+    : typeof value === "string"
+      ? [value]
+      : [];
+
+  if (list.length === 0) {
+    return <span className="text-muted-foreground">-</span>;
+  }
+
+  return (
+    <div className="flex flex-wrap gap-1">
+      {list.map((item) => (
+        <Badge key={item} variant="outline">
+          {item}
+        </Badge>
+      ))}
     </div>
   );
 }
@@ -726,7 +983,7 @@ function JsonPanel({ title, value }: { title: string; value: unknown }) {
         <CardTitle className="text-base">{title}</CardTitle>
       </CardHeader>
       <CardContent>
-        <pre className="max-h-96 overflow-auto rounded-md border bg-muted/30 p-3 font-mono text-xs">
+        <pre className="max-h-80 overflow-auto rounded-md border bg-muted/30 p-3 font-mono text-xs">
           {safeStringify(value)}
         </pre>
       </CardContent>
@@ -734,15 +991,77 @@ function JsonPanel({ title, value }: { title: string; value: unknown }) {
   );
 }
 
-function JsonBlock({ label, value }: { label: string; value: unknown }) {
-  return (
-    <div>
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      <pre className="mt-1 overflow-auto rounded-md border bg-muted/20 p-2 font-mono text-xs">
-        {safeStringify(value)}
-      </pre>
-    </div>
+function renderDecisionTrace(decisionTrace: unknown): string {
+  if (typeof decisionTrace === "string" && decisionTrace.trim()) {
+    return decisionTrace;
+  }
+
+  if (Array.isArray(decisionTrace)) {
+    const joined = decisionTrace.map((entry) => String(entry)).filter(Boolean).join(" -> ");
+    return joined || "No decision trace details returned.";
+  }
+
+  if (decisionTrace && typeof decisionTrace === "object") {
+    return "Decision trace available in structured form. Open tabs below for full detail.";
+  }
+
+  return "No decision trace details returned.";
+}
+
+function isSelectedCandidate(
+  candidate: Record<string, unknown>,
+  parsedResponse: ParsedOffersResponse,
+): boolean {
+  const recommendedOffer = parsedResponse.offers.find((offer) => offer.recommended);
+  if (!recommendedOffer) {
+    return false;
+  }
+
+  const candidateOfferId = toString(candidate.offerId ?? candidate.offer_id);
+  if (candidateOfferId && candidateOfferId === recommendedOffer.offerId) {
+    return true;
+  }
+
+  const candidateRoomTypeId = toString(candidate.roomTypeId ?? candidate.room_type_id);
+  const candidateRatePlanId = toString(candidate.ratePlanId ?? candidate.rate_plan_id);
+  const offerRoomTypeId = toString(
+    (recommendedOffer.raw.roomType as { id?: string } | undefined)?.id ??
+      recommendedOffer.raw.room_type_id,
   );
+  const offerRatePlanId = toString(
+    (recommendedOffer.raw.ratePlan as { id?: string } | undefined)?.id ??
+      recommendedOffer.raw.rate_plan_id,
+  );
+
+  return Boolean(
+    candidateRoomTypeId &&
+      candidateRatePlanId &&
+      offerRoomTypeId &&
+      offerRatePlanId &&
+      candidateRoomTypeId === offerRoomTypeId &&
+      candidateRatePlanId === offerRatePlanId,
+  );
+}
+
+function normalizePayment(value: string): string {
+  const lower = value.toLowerCase();
+  if (lower.includes("property") || lower.includes("hotel")) {
+    return "Pay at property";
+  }
+  if (lower.includes("now") || lower.includes("prepay")) {
+    return "Pay now";
+  }
+  return value;
+}
+
+function toString(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (typeof value === "number") {
+    return String(value);
+  }
+  return "";
 }
 
 function safeStringify(value: unknown): string {
@@ -751,4 +1070,21 @@ function safeStringify(value: unknown): string {
   } catch {
     return "Unable to stringify value.";
   }
+}
+
+function toIsoDate(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+function addDays(date: Date, amount: number): Date {
+  const next = new Date(date);
+  next.setDate(next.getDate() + amount);
+  return next;
+}
+
+function getUpcomingWeekendStart(baseDate: Date, minOffsetDays: number): Date {
+  const start = addDays(baseDate, minOffsetDays);
+  const day = start.getDay();
+  const distanceToFriday = (5 - day + 7) % 7;
+  return addDays(start, distanceToFriday);
 }
