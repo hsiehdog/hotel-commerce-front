@@ -30,7 +30,7 @@ describe("OffersDemoDashboard", () => {
 
     expect(screen.queryByLabelText("Demo scenario")).toBeNull();
 
-    await user.click(screen.getByRole("button", { name: "Advanced" }));
+    await user.click(screen.getByRole("button", { name: "Adv" }));
 
     expect(screen.getByLabelText("Demo scenario")).toBeTruthy();
   });
@@ -98,17 +98,15 @@ describe("OffersDemoDashboard", () => {
     await user.type(screen.getByLabelText("check_in"), "2026-03-10");
     await user.type(screen.getByLabelText("check_out"), "2026-03-12");
 
-    await user.click(screen.getByRole("button", { name: "Run Offer Decision" }));
+    await user.click(screen.getByRole("button", { name: "Run Decision" }));
 
     await waitFor(() => {
-      expect(screen.getByText("Decision Timeline")).toBeTruthy();
+      expect(screen.getByText("Why This Changed")).toBeTruthy();
     });
 
-    expect(screen.getByText("1. Input + Resolved Context")).toBeTruthy();
-    expect(screen.getByText("5. Offer Ranking")).toBeTruthy();
-    expect(screen.getByText("6. Why These Two Offers")).toBeTruthy();
-    expect(screen.getByText("7. Final Offers")).toBeTruthy();
-    expect(screen.getByText("8. Audit Trail")).toBeTruthy();
+    expect(screen.getByText("Guest Intent Profile")).toBeTruthy();
+    expect(screen.getByText("Offer Ranking")).toBeTruthy();
+    expect(screen.getByText("Audit Trail")).toBeTruthy();
   });
 
   it("submits new canonical constraint attributes in request payload", async () => {
@@ -127,11 +125,11 @@ describe("OffersDemoDashboard", () => {
     await user.type(screen.getByLabelText("check_out"), "2026-06-13");
 
     await user.click(screen.getByLabelText("pet_friendly"));
-    await user.click(screen.getByLabelText("accessible_room"));
-    await user.click(screen.getByLabelText("needs_two_beds"));
-    await user.click(screen.getByLabelText("parking_needed"));
+    await user.click(screen.getByLabelText("accessible"));
+    await user.click(screen.getByLabelText("two_beds"));
+    await user.click(screen.getByLabelText("parking"));
 
-    await user.click(screen.getByRole("button", { name: "Run Offer Decision" }));
+    await user.click(screen.getByRole("button", { name: "Run Decision" }));
 
     await waitFor(() => {
       expect(mockedRequestOfferGeneration).toHaveBeenCalledTimes(1);
