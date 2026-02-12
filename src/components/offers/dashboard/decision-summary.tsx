@@ -82,8 +82,8 @@ function DecisionOfferCard({
           <CardTitle className="text-lg">{title}</CardTitle>
           <Badge className={offer.recommended ? "bg-emerald-600 hover:bg-emerald-700" : "bg-slate-600"}>{tier}</Badge>
         </div>
-        <CardDescription className="font-mono text-xs">
-          {offer.offerId} | {offer.room} | {offer.ratePlan}
+        <CardDescription className="text-xs">
+          {offer.room} | {offer.ratePlan}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 text-sm">
@@ -97,8 +97,30 @@ function DecisionOfferCard({
             <span className="text-xs font-medium text-muted-foreground">Total Price</span>
             <span className="text-lg font-bold text-primary">{formatMoney(totalForDisplay)}</span>
           </div>
-          <div className="mt-2 text-xs text-muted-foreground">
-             Base {formatMoney(offer.pricingBreakdown.subtotal)} + Taxes {formatMoney(offer.pricingBreakdown.taxesFees)}
+          <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+             <div className="flex justify-between">
+                <span>Base price</span>
+                <span className="font-mono">{formatMoney(offer.pricingBreakdown.subtotal)}</span>
+             </div>
+             <div className="flex justify-between">
+                <span>Taxes & fees</span>
+                <span className="font-mono">{formatMoney(offer.pricingBreakdown.taxesFees)}</span>
+             </div>
+             {offer.pricingBreakdown.fees.length > 0 ? (
+                offer.pricingBreakdown.fees.map((fee) => (
+                   <div key={`${offer.offerId}-${fee.label}`} className="flex justify-between">
+                      <span>{fee.label}</span>
+                      <span className="font-mono">{formatMoney(fee.amount)}</span>
+                   </div>
+                ))
+             ) : (
+                offer.pricingBreakdown.addOns !== null && offer.pricingBreakdown.addOns > 0 && (
+                   <div className="flex justify-between">
+                      <span>Included fees</span>
+                      <span className="font-mono">{formatMoney(offer.pricingBreakdown.addOns)}</span>
+                   </div>
+                )
+             )}
           </div>
         </div>
 

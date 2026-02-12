@@ -349,6 +349,7 @@ export type ParsedOfferCard = {
     subtotal: number | null;
     taxesFees: number | null;
     addOns: number | null;
+    fees: Array<{ label: string; amount: number }>;
     total: number | null;
   };
   cancellationSummary: string;
@@ -418,11 +419,11 @@ export function parseOffersResponse(payload: unknown): ParsedOffersResponse {
       type: toStringOrFallback(raw.type, raw.offerType, "unknown"),
       recommended: Boolean(raw.recommended ?? raw.isRecommended),
       room: toStringOrFallback(
-        raw.room,
         raw.room_name,
+        roomType.name,
+        raw.room,
         raw.roomType,
         raw.room_type,
-        roomType.name,
         roomType.id,
         "-",
       ),
@@ -434,10 +435,10 @@ export function parseOffersResponse(payload: unknown): ParsedOffersResponse {
       ),
       features: firstStringArray(raw.features, raw.featureFlags, roomType.features),
       ratePlan: toStringOrFallback(
-        raw.ratePlan,
-        raw.rate_plan,
         raw.rate_plan_name,
         ratePlan.name,
+        raw.ratePlan,
+        raw.rate_plan,
         ratePlan.id,
         "-",
       ),
@@ -844,6 +845,7 @@ function extractPricingBreakdown(offer: Record<string, unknown>): {
   subtotal: number | null;
   taxesFees: number | null;
   addOns: number | null;
+  fees: Array<{ label: string; amount: number }>;
   total: number | null;
 } {
   const pricing = isRecord(offer.pricing) ? offer.pricing : {};
@@ -887,6 +889,74 @@ function extractPricingBreakdown(offer: Record<string, unknown>): {
     pricing.addons,
   );
 
+  const fees: Array<{ label: string; amount: number }> = [];
+  const enhancementsSource = firstArray(offer.enhancements, offer.upsells);
+
+  if (enhancementsSource.length > 0) {
+    for (const item of enhancementsSource) {
+      if (isRecord(item)) {
+        const name = toStringOrFallback(item.name, item.description, item.label);
+        const lowerName = name.toLowerCase();
+        
+        // Skip technical primitives
+        if (lowerName === "nights" || lowerName.includes("per night")) {
+          continue;
+        }
+
+        // Try to find the total amount for this enhancement in includedFees
+        let amount: number | null = null;
+        if (lowerName.includes("parking")) {
+          amount = firstNumber(includedFees.parkingFeeTotal, includedFees.parking_fee_total);
+        } else if (lowerName.includes("pet")) {
+          amount = firstNumber(includedFees.petFeeTotal, includedFees.pet_fee_total);
+        }
+
+        // If not matched by keyword, try nested price amount or direct amount from item
+        if (amount === null) {
+          const priceObj = isRecord(item.price) ? item.price : {};
+          amount = firstNumber(
+            priceObj.amount,
+            priceObj.total,
+            item.total,
+            item.totalPrice,
+            item.amount,
+            item.price
+          );
+        }
+
+        if (name && amount !== null && amount > 0) {
+          fees.push({ label: name, amount });
+        }
+      }
+    }
+  }
+
+  // Fallback to includedFees ONLY if no valid fees were found in enhancements
+  if (fees.length === 0) {
+    for (const [key, value] of Object.entries(includedFees)) {
+      if (
+        key === "totalIncludedFees" ||
+        key === "total_included_fees" ||
+        key === "total"
+      ) {
+        continue;
+      }
+      const amount = toNumber(value);
+      if (amount !== null && amount > 0) {
+        const lowerKey = key.toLowerCase();
+        if (lowerKey === "nights" || lowerKey.includes("per_night")) {
+          continue;
+        }
+        const label =
+          key
+            .replace(/_/g, " ")
+            .replace(/\b\w/g, (l) => l.toUpperCase())
+            .replace(/ Fee$/i, "") + " fee";
+        fees.push({ label, amount });
+      }
+    }
+  }
+
   const total = firstNumber(
     breakdown.total,
     pricing.total,
@@ -901,6 +971,7 @@ function extractPricingBreakdown(offer: Record<string, unknown>): {
     subtotal,
     taxesFees,
     addOns,
+    fees,
     total,
   };
 }
