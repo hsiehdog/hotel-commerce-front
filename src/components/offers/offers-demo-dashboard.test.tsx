@@ -36,7 +36,7 @@ describe("OffersDemoDashboard", () => {
     expect(screen.getByLabelText("Explainability mode")).toBeTruthy();
   });
 
-  it("renders decision story when response includes debug payload", async () => {
+  it("renders single-screen decision audit trail when response includes debug payload", async () => {
     const user = userEvent.setup();
 
     mockedRequestOfferGeneration.mockResolvedValue({
@@ -102,14 +102,14 @@ describe("OffersDemoDashboard", () => {
     await user.click(screen.getByRole("button", { name: "Run Offer Decision" }));
 
     await waitFor(() => {
-      expect(screen.getByText("Why this was selected")).toBeTruthy();
+      expect(screen.getByText("Decision Timeline")).toBeTruthy();
     });
 
-    expect(screen.getByText("Primary recommendation")).toBeTruthy();
-    expect(screen.getByText("Secondary option")).toBeTruthy();
-    expect(screen.getByText("Property context")).toBeTruthy();
-    expect(screen.getByText("Filters applied")).toBeTruthy();
-    expect(screen.getByText("Fallback decisions")).toBeTruthy();
+    expect(screen.getByText("1. Input + Resolved Context")).toBeTruthy();
+    expect(screen.getByText("5. Offer Ranking")).toBeTruthy();
+    expect(screen.getByText("6. Why These Two Offers")).toBeTruthy();
+    expect(screen.getByText("7. Final Offers")).toBeTruthy();
+    expect(screen.getByText("8. Audit Trail")).toBeTruthy();
   });
 
   it("submits new canonical constraint attributes in request payload", async () => {

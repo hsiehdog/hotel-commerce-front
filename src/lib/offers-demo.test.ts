@@ -326,6 +326,36 @@ describe("offers response parser", () => {
     expect(parsed.offers[0]?.pricingBreakdown.total).toBe(370);
   });
 
+  it("maps demo pricing breakdown with baseRateSubtotal and includedFees", () => {
+    const parsed = parseOffersResponse({
+      data: {
+        configVersion: 1,
+        offers: [
+          {
+            offerId: "rp_flex",
+            recommended: true,
+            pricing: {
+              totalAfterTax: 249.76,
+              breakdown: {
+                baseRateSubtotal: 223,
+                taxesAndFees: 26.76,
+                includedFees: {
+                  totalIncludedFees: 0,
+                },
+              },
+            },
+          },
+        ],
+      },
+    });
+
+    expect(parsed.configVersion).toBe("1");
+    expect(parsed.offers[0]?.pricingBreakdown.subtotal).toBe(223);
+    expect(parsed.offers[0]?.pricingBreakdown.taxesFees).toBe(26.76);
+    expect(parsed.offers[0]?.pricingBreakdown.addOns).toBe(0);
+    expect(parsed.offers[0]?.pricingBreakdown.total).toBe(249.76);
+  });
+
   it("returns a secondary offer even when offerId values are duplicated", () => {
     const parsed = parseOffersResponse({
       data: {

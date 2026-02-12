@@ -935,10 +935,17 @@ function extractPricingBreakdown(offer: Record<string, unknown>): {
 } {
   const pricing = isRecord(offer.pricing) ? offer.pricing : {};
   const breakdown = isRecord(pricing.breakdown) ? pricing.breakdown : {};
+  const includedFees = isRecord(breakdown.includedFees)
+    ? breakdown.includedFees
+    : isRecord(breakdown.included_fees)
+      ? breakdown.included_fees
+      : {};
 
   const subtotal = firstNumber(
     breakdown.subtotal,
     breakdown.sub_total,
+    breakdown.baseRateSubtotal,
+    breakdown.base_rate_subtotal,
     pricing.subtotal,
     pricing.sub_total,
     pricing.totalBeforeTax,
@@ -960,6 +967,8 @@ function extractPricingBreakdown(offer: Record<string, unknown>): {
     breakdown.addOns,
     breakdown.add_ons,
     breakdown.addons,
+    includedFees.totalIncludedFees,
+    includedFees.total_included_fees,
     pricing.addOns,
     pricing.add_ons,
     pricing.addons,
@@ -1107,6 +1116,12 @@ function toStringOrFallback(...values: unknown[]): string {
   for (const value of values) {
     if (typeof value === "string" && value.trim()) {
       return value;
+    }
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return String(value);
+    }
+    if (typeof value === "boolean") {
+      return value ? "true" : "false";
     }
   }
   return "";
