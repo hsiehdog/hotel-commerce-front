@@ -24,10 +24,6 @@ describe("offers demo request builder", () => {
       children: "1",
       child_ages: [9],
       roomOccupancies: [{ adults: 2, children: 1 }],
-      preferences: {
-        needs_space: true,
-        late_arrival: false,
-      },
       pet_friendly: true,
       accessible_room: true,
       needs_two_beds: false,
@@ -51,6 +47,7 @@ describe("offers demo request builder", () => {
     expect(payload.accessible_room).toBe(true);
     expect(payload.parking_needed).toBe(true);
     expect(payload.budget_cap).toBe(450);
+    expect(payload).not.toHaveProperty("preferences");
     expect((payload as Record<string, unknown>).request).toBeUndefined();
     expect((payload as Record<string, unknown>).payload).toBeUndefined();
   });
@@ -230,7 +227,7 @@ describe("offers response parser", () => {
     const parsed = parseOffersResponse({
       data: {
         propertyId: "inn_at_mount_shasta",
-        offers: [{ offerId: "off_safe_business", recommended: true }],
+        offers: [{ offerId: "rp_flex", recommended: true }],
         debug: {
           resolvedRequest: {
             strategyMode: "balanced",
@@ -251,7 +248,7 @@ describe("offers response parser", () => {
         priceBasisUsed: "afterTax",
         offers: [
           {
-            offerId: "off_safe_business",
+            offerId: "rp_flex",
             type: "SAFE",
             recommended: true,
             roomType: {

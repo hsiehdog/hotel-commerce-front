@@ -5,11 +5,6 @@ export type RoomOccupancy = {
   children: number;
 };
 
-export type OfferPreferences = {
-  needs_space: boolean;
-  late_arrival: boolean;
-};
-
 export type OffersGenerateRequest = {
   property_id: string;
   channel: OfferChannel;
@@ -22,7 +17,6 @@ export type OffersGenerateRequest = {
   children: number;
   child_ages: number[];
   roomOccupancies: RoomOccupancy[];
-  preferences: OfferPreferences;
   pet_friendly?: boolean;
   accessible_room?: boolean;
   needs_two_beds?: boolean;
@@ -44,7 +38,6 @@ export type OffersDraft = {
   children: string;
   child_ages: number[];
   roomOccupancies: RoomOccupancy[];
-  preferences: OfferPreferences;
   pet_friendly: boolean;
   accessible_room: boolean;
   needs_two_beds: boolean;
@@ -67,7 +60,7 @@ export const scenarioPresets: ScenarioPreset[] = [
   {
     id: "family-stay",
     label: "Family stay",
-    description: "Family profile with space preference and child ages",
+    description: "Family profile with child ages",
     values: {
       property_id: "hotel-lake-001",
       channel: "web",
@@ -79,19 +72,15 @@ export const scenarioPresets: ScenarioPreset[] = [
       children: "2",
       child_ages: [5, 8],
       roomOccupancies: [{ adults: 2, children: 2 }],
-      preferences: {
-        needs_space: true,
-        late_arrival: false,
-      },
       needs_two_beds: true,
       stub_scenario: "family_space_priority",
       debug: true,
     },
   },
   {
-    id: "late-arrival",
-    label: "Late arrival",
-    description: "Late check-in preference and flexibility trade-off",
+    id: "short-stay",
+    label: "Short stay",
+    description: "Single-night profile with standard constraints",
     values: {
       property_id: "hotel-city-007",
       channel: "voice",
@@ -103,12 +92,8 @@ export const scenarioPresets: ScenarioPreset[] = [
       children: "0",
       child_ages: [],
       roomOccupancies: [{ adults: 1, children: 0 }],
-      preferences: {
-        needs_space: false,
-        late_arrival: true,
-      },
       parking_needed: true,
-      stub_scenario: "late_arrival_after_midnight",
+      stub_scenario: "solo_short_stay",
       debug: true,
     },
   },
@@ -130,10 +115,6 @@ export const scenarioPresets: ScenarioPreset[] = [
         { adults: 2, children: 0 },
         { adults: 2, children: 0 },
       ],
-      preferences: {
-        needs_space: false,
-        late_arrival: false,
-      },
       stub_scenario: "compression_weekend_event",
       debug: true,
     },
@@ -156,10 +137,6 @@ export const scenarioPresets: ScenarioPreset[] = [
       children: "0",
       child_ages: [],
       roomOccupancies: [{ adults: 2, children: 0 }],
-      preferences: {
-        needs_space: false,
-        late_arrival: false,
-      },
       budget_cap: "350",
       stub_scenario: "price_sensitive_guest",
       debug: true,
@@ -201,10 +178,6 @@ export function getDefaultOffersDraft(): OffersDraft {
     children: "0",
     child_ages: [],
     roomOccupancies: [{ adults: 2, children: 0 }],
-    preferences: {
-      needs_space: false,
-      late_arrival: false,
-    },
     pet_friendly: false,
     accessible_room: false,
     needs_two_beds: false,
@@ -346,10 +319,6 @@ export function buildOffersGenerateRequest(
     children: Number(draft.children),
     child_ages: draft.child_ages,
     roomOccupancies: draft.roomOccupancies,
-    preferences: {
-      needs_space: draft.preferences.needs_space,
-      late_arrival: draft.preferences.late_arrival,
-    },
     pet_friendly: draft.pet_friendly,
     accessible_room: draft.accessible_room,
     needs_two_beds: draft.needs_two_beds,
@@ -382,7 +351,6 @@ export type ParsedOfferCard = {
   pricing: unknown;
   enhancements: unknown;
   disclosures: unknown;
-  urgency: unknown;
   totalPrice: number | null;
   pricingBreakdown: {
     subtotal: number | null;
@@ -484,7 +452,6 @@ export function parseOffersResponse(payload: unknown): ParsedOffersResponse {
       pricing: raw.pricing ?? raw.price ?? raw.totalPrice ?? null,
       enhancements: raw.enhancements ?? raw.upsells ?? [],
       disclosures: raw.disclosures ?? raw.notices ?? [],
-      urgency: raw.urgency ?? raw.fallbackUrgency ?? null,
       totalPrice: extractTotalPrice(raw),
       pricingBreakdown: extractPricingBreakdown(raw),
       cancellationSummary: extractCancellationSummary(raw),

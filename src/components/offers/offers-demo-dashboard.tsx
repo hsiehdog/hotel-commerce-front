@@ -97,6 +97,7 @@ export function OffersDemoDashboard() {
   const reasonGroups = groupReasonCodes(parsedResponse?.reasonCodes ?? []);
 
   const resolvedRequest = useMemo(() => asRecord(parsedResponse?.debug.resolvedRequest), [parsedResponse]);
+  const profilePreAri = useMemo(() => asRecord(parsedResponse?.debug.profilePreAri), [parsedResponse]);
   const profileFinal = useMemo(() => asRecord(parsedResponse?.debug.profileFinal), [parsedResponse]);
   const selectionSummary = useMemo(() => asRecord(parsedResponse?.debug.selectionSummary), [parsedResponse]);
   const funnelStages = useMemo(() => buildFunnelStages(parsedResponse), [parsedResponse]);
@@ -122,7 +123,10 @@ export function OffersDemoDashboard() {
     return filtered.length > 0 ? filtered : allCandidates;
   }, [activeFunnel, allCandidates]);
 
-  const whyChips = useMemo(() => buildWhyChips(profileFinal, resolvedRequest, draft), [draft, profileFinal, resolvedRequest]);
+  const whyChips = useMemo(
+    () => buildWhyChips(profilePreAri, profileFinal, resolvedRequest, draft),
+    [draft, profileFinal, profilePreAri, resolvedRequest],
+  );
   const topReasons = useMemo(
     () => buildTopReasonSummary(parsedResponse, whyChips, selectionSummary, primaryOffer),
     [parsedResponse, whyChips, selectionSummary, primaryOffer],
@@ -583,43 +587,6 @@ export function OffersDemoDashboard() {
                     <p className="text-xs text-muted-foreground">
                       Columns are room label, adults, then children.
                     </p>
-                  </div>
-
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={draft.preferences.needs_space}
-                        onChange={(event) =>
-                          setDraft((prev) => ({
-                            ...prev,
-                            preferences: {
-                              ...prev.preferences,
-                              needs_space: event.target.checked,
-                            },
-                          }))
-                        }
-                        className="h-4 w-4 rounded border-input"
-                      />
-                      preferences.needs_space
-                    </label>
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={draft.preferences.late_arrival}
-                        onChange={(event) =>
-                          setDraft((prev) => ({
-                            ...prev,
-                            preferences: {
-                              ...prev.preferences,
-                              late_arrival: event.target.checked,
-                            },
-                          }))
-                        }
-                        className="h-4 w-4 rounded border-input"
-                      />
-                      preferences.late_arrival
-                    </label>
                   </div>
 
                   <div className="space-y-3 rounded-md border bg-muted/10 p-4">
@@ -1316,6 +1283,7 @@ function DecisionOfferCard({
         {enhancements.length > 0 && (
           <div>
             <p className="mb-1 text-xs font-medium text-muted-foreground">Enhancements</p>
+            <p className="mb-2 text-xs text-muted-foreground">Attached one or more applicable enhancements.</p>
             <div className="flex flex-wrap gap-1">
               {enhancements.map((enhancement) => (
                 <Badge key={`${offer.offerId}-${enhancement}`} variant="outline">
@@ -1573,6 +1541,7 @@ function buildFunnelStages(parsedResponse: ParsedOffersResponse | null): FunnelS
 }
 
 function buildWhyChips(
+  profilePreAri: Record<string, unknown>,
   profileFinal: Record<string, unknown>,
   resolvedRequest: Record<string, unknown>,
   draft: OffersDraft,
@@ -1591,15 +1560,15 @@ function buildWhyChips(
     chips.push({ label: `leadTimeDays=${leadTimeDays} -> short-lead`, reason: "Short lead time" });
   }
 
-  const lateArrival =
-    toBoolean(
-      profileFinal.late_arrival ??
-        profileFinal.lateArrival ??
-        resolvedRequest.late_arrival ??
-        resolvedRequest.lateArrival,
-    ) ?? draft.preferences.late_arrival;
-  if (lateArrival) {
-    chips.push({ label: "late_arrival=true -> preference boost", reason: "Late arrival preference signal" });
+  const tripType =
+    toString(
+      profilePreAri.tripType ??
+        profilePreAri.trip_type ??
+        profileFinal.tripType ??
+        profileFinal.trip_type,
+    ) || inferTripTypeFromDraft(draft);
+  if (tripType.toLowerCase() === "family") {
+    chips.push({ label: "tripType=family -> family enhancements eligible", reason: "Family trip profile" });
   }
 
   const roomsAvailable = firstNumber(
@@ -1683,15 +1652,11 @@ function buildNotUsedInputs(
   const reasons = reasonCodes.join(" ").toLowerCase();
   const trace = typeof decisionTrace === "string" ? decisionTrace.toLowerCase() : safeStringify(decisionTrace).toLowerCase();
   const text = `${reasons} ${trace}`;
-  const preferences = asRecord(requestPayload.preferences);
-
   const checks: Array<{ label: string; value: unknown; token: string }> = [
     { label: "pet_friendly", value: requestPayload.pet_friendly, token: "pet" },
     { label: "accessible_room", value: requestPayload.accessible_room, token: "accessible" },
     { label: "needs_two_beds", value: requestPayload.needs_two_beds, token: "two bed" },
     { label: "parking_needed", value: requestPayload.parking_needed, token: "parking" },
-    { label: "needs_space", value: preferences.needs_space, token: "space" },
-    { label: "late_arrival", value: preferences.late_arrival, token: "late" },
     { label: "budget_cap", value: requestPayload.budget_cap, token: "budget" },
   ];
 
@@ -1854,6 +1819,16 @@ function toPassFailText(value: unknown): string {
     return "unknown";
   }
   return parsed ? "pass" : "fail";
+}
+
+function inferTripTypeFromDraft(draft: OffersDraft): string {
+  if (Number(draft.children) > 0 || draft.roomOccupancies.some((room) => room.children > 0)) {
+    return "family";
+  }
+  if (Number(draft.adults) <= 1) {
+    return "solo";
+  }
+  return "couple";
 }
 
 function renderDecisionTrace(decisionTrace: unknown): string {

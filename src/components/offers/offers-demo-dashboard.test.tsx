@@ -148,5 +148,6 @@ describe("OffersDemoDashboard", () => {
         budget_cap: 500,
       }),
     );
+    expect(mockedRequestOfferGeneration.mock.calls[0]?.[0]).not.toHaveProperty("preferences");
   });
 });
