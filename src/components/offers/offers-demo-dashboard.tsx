@@ -533,6 +533,69 @@ export function OffersDemoDashboard() {
                   preferences.late_arrival
                 </label>
               </div>
+
+              <div className="space-y-3 rounded-md border bg-muted/10 p-4">
+                <p className="text-sm font-semibold">Guest constraints</p>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={draft.pet_friendly}
+                      onChange={(event) =>
+                        setDraft((prev) => ({ ...prev, pet_friendly: event.target.checked }))
+                      }
+                      className="h-4 w-4 rounded border-input"
+                    />
+                    pet_friendly
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={draft.accessible_room}
+                      onChange={(event) =>
+                        setDraft((prev) => ({ ...prev, accessible_room: event.target.checked }))
+                      }
+                      className="h-4 w-4 rounded border-input"
+                    />
+                    accessible_room
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={draft.needs_two_beds}
+                      onChange={(event) =>
+                        setDraft((prev) => ({ ...prev, needs_two_beds: event.target.checked }))
+                      }
+                      className="h-4 w-4 rounded border-input"
+                    />
+                    needs_two_beds
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={draft.parking_needed}
+                      onChange={(event) =>
+                        setDraft((prev) => ({ ...prev, parking_needed: event.target.checked }))
+                      }
+                      className="h-4 w-4 rounded border-input"
+                    />
+                    parking_needed
+                  </label>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="budget_cap">budget_cap (optional)</Label>
+                  <Input
+                    id="budget_cap"
+                    type="number"
+                    min={1}
+                    value={draft.budget_cap}
+                    onChange={(event) =>
+                      setDraft((prev) => ({ ...prev, budget_cap: event.target.value }))
+                    }
+                    placeholder="400"
+                  />
+                </div>
+              </div>
             </section>
 
             {isAdvanced && (
@@ -915,6 +978,8 @@ function DecisionOfferCard({
     ? "Non-refundable"
     : "Refundable";
   const payment = normalizePayment(offer.paymentSummary);
+  const enhancements = toEnhancementLabels(offer.enhancements);
+  const totalForDisplay = offer.pricingBreakdown.total ?? offer.totalPrice;
 
   return (
     <Card className={highlighted ? "border-emerald-300/70 bg-emerald-50/60 dark:bg-emerald-950/30" : ""}>
@@ -932,7 +997,25 @@ function DecisionOfferCard({
         </div>
         <p>Risk & flexibility: {offer.cancellationSummary}</p>
         <p>Fallback action: {safeStringify(offer.urgency)}</p>
-        <p>Total: {offer.totalPrice === null ? "n/a" : `$${offer.totalPrice.toFixed(2)}`}</p>
+        <div className="rounded-md border bg-muted/20 p-2">
+          <p className="mb-1 text-xs font-medium text-muted-foreground">Pricing breakdown</p>
+          <p>Subtotal: {formatMoney(offer.pricingBreakdown.subtotal)}</p>
+          <p>Taxes/fees: {formatMoney(offer.pricingBreakdown.taxesFees)}</p>
+          <p>Add-ons: {formatMoney(offer.pricingBreakdown.addOns)}</p>
+          <p className="font-medium">Total: {formatMoney(totalForDisplay)}</p>
+        </div>
+        {enhancements.length > 0 && (
+          <div>
+            <p className="mb-1 text-xs font-medium text-muted-foreground">Enhancements</p>
+            <div className="flex flex-wrap gap-1">
+              {enhancements.map((enhancement) => (
+                <Badge key={`${offer.offerId}-${enhancement}`} variant="outline">
+                  {enhancement}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -1062,6 +1145,37 @@ function toString(value: unknown): string {
     return String(value);
   }
   return "";
+}
+
+function toEnhancementLabels(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item) => {
+      if (typeof item === "string") {
+        return item;
+      }
+      if (item && typeof item === "object") {
+        const record = item as Record<string, unknown>;
+        if (typeof record.name === "string" && record.name.trim()) {
+          return record.name;
+        }
+        if (typeof record.id === "string" && record.id.trim()) {
+          return record.id;
+        }
+      }
+      return "";
+    })
+    .filter(Boolean);
+}
+
+function formatMoney(value: number | null): string {
+  if (value === null) {
+    return "n/a";
+  }
+  return `$${value.toFixed(2)}`;
 }
 
 function safeStringify(value: unknown): string {

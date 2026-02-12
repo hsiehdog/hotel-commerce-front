@@ -23,6 +23,11 @@ export type OffersGenerateRequest = {
   child_ages: number[];
   roomOccupancies: RoomOccupancy[];
   preferences: OfferPreferences;
+  pet_friendly?: boolean;
+  accessible_room?: boolean;
+  needs_two_beds?: boolean;
+  budget_cap?: number;
+  parking_needed?: boolean;
   stub_scenario?: string;
   debug: boolean;
 } & Record<string, unknown>;
@@ -40,6 +45,11 @@ export type OffersDraft = {
   child_ages: number[];
   roomOccupancies: RoomOccupancy[];
   preferences: OfferPreferences;
+  pet_friendly: boolean;
+  accessible_room: boolean;
+  needs_two_beds: boolean;
+  budget_cap: string;
+  parking_needed: boolean;
   stub_scenario: string;
   debug: boolean;
   extraJson: string;
@@ -73,6 +83,7 @@ export const scenarioPresets: ScenarioPreset[] = [
         needs_space: true,
         late_arrival: false,
       },
+      needs_two_beds: true,
       stub_scenario: "family_space_priority",
       debug: true,
     },
@@ -96,6 +107,7 @@ export const scenarioPresets: ScenarioPreset[] = [
         needs_space: false,
         late_arrival: true,
       },
+      parking_needed: true,
       stub_scenario: "late_arrival_after_midnight",
       debug: true,
     },
@@ -148,6 +160,7 @@ export const scenarioPresets: ScenarioPreset[] = [
         needs_space: false,
         late_arrival: false,
       },
+      budget_cap: "350",
       stub_scenario: "price_sensitive_guest",
       debug: true,
     },
@@ -192,6 +205,11 @@ export function getDefaultOffersDraft(): OffersDraft {
       needs_space: false,
       late_arrival: false,
     },
+    pet_friendly: false,
+    accessible_room: false,
+    needs_two_beds: false,
+    budget_cap: "",
+    parking_needed: false,
     stub_scenario: "",
     debug: true,
     extraJson: "",
@@ -299,6 +317,13 @@ export function validateOffersDraft(
     }
   }
 
+  if (draft.budget_cap.trim()) {
+    const budgetCap = Number(draft.budget_cap);
+    if (!Number.isFinite(budgetCap) || budgetCap <= 0) {
+      errors.push("budget_cap must be a number greater than 0 when provided.");
+    }
+  }
+
   if (advancedJsonError) {
     errors.push(advancedJsonError);
   }
@@ -325,6 +350,10 @@ export function buildOffersGenerateRequest(
       needs_space: draft.preferences.needs_space,
       late_arrival: draft.preferences.late_arrival,
     },
+    pet_friendly: draft.pet_friendly,
+    accessible_room: draft.accessible_room,
+    needs_two_beds: draft.needs_two_beds,
+    parking_needed: draft.parking_needed,
     stub_scenario: draft.stub_scenario.trim() || undefined,
     debug: draft.debug,
     ...advancedFields,
@@ -332,6 +361,10 @@ export function buildOffersGenerateRequest(
 
   if (draft.nights.trim()) {
     payload.nights = Number(draft.nights);
+  }
+
+  if (draft.budget_cap.trim()) {
+    payload.budget_cap = Number(draft.budget_cap);
   }
 
   return payload;
@@ -351,6 +384,12 @@ export type ParsedOfferCard = {
   disclosures: unknown;
   urgency: unknown;
   totalPrice: number | null;
+  pricingBreakdown: {
+    subtotal: number | null;
+    taxesFees: number | null;
+    addOns: number | null;
+    total: number | null;
+  };
   cancellationSummary: string;
   paymentSummary: string;
   raw: Record<string, unknown>;
@@ -447,6 +486,7 @@ export function parseOffersResponse(payload: unknown): ParsedOffersResponse {
       disclosures: raw.disclosures ?? raw.notices ?? [],
       urgency: raw.urgency ?? raw.fallbackUrgency ?? null,
       totalPrice: extractTotalPrice(raw),
+      pricingBreakdown: extractPricingBreakdown(raw),
       cancellationSummary: extractCancellationSummary(raw),
       paymentSummary: extractPaymentSummary(raw),
       raw,
@@ -862,6 +902,11 @@ function pickRecord(...values: unknown[]): Record<string, unknown> {
 }
 
 function extractTotalPrice(offer: Record<string, unknown>): number | null {
+  const breakdown = extractPricingBreakdown(offer);
+  if (breakdown.total !== null) {
+    return breakdown.total;
+  }
+
   const pricing = isRecord(offer.pricing) ? offer.pricing : null;
   const direct = [
     offer.total,
@@ -880,6 +925,62 @@ function extractTotalPrice(offer: Record<string, unknown>): number | null {
   }
 
   return null;
+}
+
+function extractPricingBreakdown(offer: Record<string, unknown>): {
+  subtotal: number | null;
+  taxesFees: number | null;
+  addOns: number | null;
+  total: number | null;
+} {
+  const pricing = isRecord(offer.pricing) ? offer.pricing : {};
+  const breakdown = isRecord(pricing.breakdown) ? pricing.breakdown : {};
+
+  const subtotal = firstNumber(
+    breakdown.subtotal,
+    breakdown.sub_total,
+    pricing.subtotal,
+    pricing.sub_total,
+    pricing.totalBeforeTax,
+    pricing.total_before_tax,
+  );
+
+  const taxesFees = firstNumber(
+    breakdown.taxesFees,
+    breakdown.taxes_and_fees,
+    breakdown.taxesAndFees,
+    pricing.taxesFees,
+    pricing.taxes_and_fees,
+    pricing.taxesAndFees,
+    pricing.taxes,
+    pricing.fees,
+  );
+
+  const addOns = firstNumber(
+    breakdown.addOns,
+    breakdown.add_ons,
+    breakdown.addons,
+    pricing.addOns,
+    pricing.add_ons,
+    pricing.addons,
+  );
+
+  const total = firstNumber(
+    breakdown.total,
+    pricing.total,
+    pricing.totalAfterTax,
+    pricing.total_after_tax,
+    offer.total,
+    offer.totalPrice,
+    offer.total_amount,
+  );
+
+  return {
+    subtotal,
+    taxesFees,
+    addOns,
+    total,
+  };
 }
 
 function extractCancellationSummary(offer: Record<string, unknown>): string {
@@ -958,6 +1059,16 @@ function toNumber(value: unknown): number | null {
   if (typeof value === "string" && value.trim()) {
     const parsed = Number(value);
     if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return null;
+}
+
+function firstNumber(...values: unknown[]): number | null {
+  for (const value of values) {
+    const parsed = toNumber(value);
+    if (parsed !== null) {
       return parsed;
     }
   }

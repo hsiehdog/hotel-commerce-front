@@ -111,4 +111,42 @@ describe("OffersDemoDashboard", () => {
     expect(screen.getByText("Filters applied")).toBeTruthy();
     expect(screen.getByText("Fallback decisions")).toBeTruthy();
   });
+
+  it("submits new canonical constraint attributes in request payload", async () => {
+    const user = userEvent.setup();
+
+    mockedRequestOfferGeneration.mockResolvedValue({
+      data: {
+        propertyId: "hotel-9",
+        offers: [{ offerId: "offer-safe", recommended: true }],
+      },
+    });
+
+    render(<OffersDemoDashboard />);
+
+    await user.type(screen.getByLabelText("check_in"), "2026-06-10");
+    await user.type(screen.getByLabelText("check_out"), "2026-06-13");
+
+    await user.click(screen.getByLabelText("pet_friendly"));
+    await user.click(screen.getByLabelText("accessible_room"));
+    await user.click(screen.getByLabelText("needs_two_beds"));
+    await user.click(screen.getByLabelText("parking_needed"));
+    await user.type(screen.getByLabelText("budget_cap (optional)"), "500");
+
+    await user.click(screen.getByRole("button", { name: "Run Offer Decision" }));
+
+    await waitFor(() => {
+      expect(mockedRequestOfferGeneration).toHaveBeenCalledTimes(1);
+    });
+
+    expect(mockedRequestOfferGeneration).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pet_friendly: true,
+        accessible_room: true,
+        needs_two_beds: true,
+        parking_needed: true,
+        budget_cap: 500,
+      }),
+    );
+  });
 });

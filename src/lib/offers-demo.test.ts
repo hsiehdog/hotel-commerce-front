@@ -28,6 +28,11 @@ describe("offers demo request builder", () => {
         needs_space: true,
         late_arrival: false,
       },
+      pet_friendly: true,
+      accessible_room: true,
+      needs_two_beds: false,
+      budget_cap: "450",
+      parking_needed: true,
       debug: true,
       currency: "usd",
       stub_scenario: "family_space_priority",
@@ -42,6 +47,10 @@ describe("offers demo request builder", () => {
     expect(payload.nights).toBe(2);
     expect(payload.market_segment).toBe("family");
     expect(payload.debug).toBe(true);
+    expect(payload.pet_friendly).toBe(true);
+    expect(payload.accessible_room).toBe(true);
+    expect(payload.parking_needed).toBe(true);
+    expect(payload.budget_cap).toBe(450);
     expect((payload as Record<string, unknown>).request).toBeUndefined();
     expect((payload as Record<string, unknown>).payload).toBeUndefined();
   });
@@ -63,6 +72,24 @@ describe("offers demo request builder", () => {
 
     expect(errors).toContain("child_ages length must match children.");
     expect(errors).toContain("Advanced JSON is not valid JSON.");
+  });
+
+  it("validates budget_cap when provided", () => {
+    const draft = {
+      ...getDefaultOffersDraft(),
+      property_id: "hotel-test-1",
+      check_in: "2026-01-02",
+      check_out: "2026-01-03",
+      rooms: "1",
+      adults: "2",
+      children: "0",
+      child_ages: [],
+      roomOccupancies: [{ adults: 2, children: 0 }],
+      budget_cap: "-10",
+    };
+
+    const errors = validateOffersDraft(draft, null);
+    expect(errors).toContain("budget_cap must be a number greater than 0 when provided.");
   });
 
   it("parses advanced JSON object and rejects non-object payloads", () => {
@@ -268,8 +295,35 @@ describe("offers response parser", () => {
     expect(parsed.offers[0]?.ratePlan).toBe("Flexible");
     expect(parsed.offers[0]?.cancellationSummary).toContain("Free cancellation");
     expect(parsed.offers[0]?.paymentSummary).toBe("pay_at_property");
+    expect(parsed.offers[0]?.pricingBreakdown.total).toBe(383.04);
     expect(parsed.reasonCodes).toContain("SELECT_PRIMARY_SAFE");
     expect(parsed.debug.topCandidates[0]?.scoreTotal).toBe(57.9);
+  });
+
+  it("maps pricing breakdown fields when present", () => {
+    const parsed = parseOffersResponse({
+      data: {
+        offers: [
+          {
+            offerId: "offer-1",
+            recommended: true,
+            pricing: {
+              breakdown: {
+                subtotal: 300,
+                taxesAndFees: 45,
+                addOns: 25,
+                total: 370,
+              },
+            },
+          },
+        ],
+      },
+    });
+
+    expect(parsed.offers[0]?.pricingBreakdown.subtotal).toBe(300);
+    expect(parsed.offers[0]?.pricingBreakdown.taxesFees).toBe(45);
+    expect(parsed.offers[0]?.pricingBreakdown.addOns).toBe(25);
+    expect(parsed.offers[0]?.pricingBreakdown.total).toBe(370);
   });
 
   it("returns a secondary offer even when offerId values are duplicated", () => {

@@ -50,6 +50,7 @@ Use this route to demo `POST /offers/generate` as a business-facing offer decisi
 4. Open `http://localhost:3000/demo/offers`.
 5. Keep **Basic** mode for day-to-day demos:
    - guest request inputs
+   - constraint inputs: `pet_friendly`, `accessible_room`, `needs_two_beds`, `parking_needed`, optional `budget_cap`
    - business-labeled presets (`Family stay`, `Late arrival`, `High-demand weekend`, `Price-sensitive guest`)
    - quick date chips (`Tonight`, `Tomorrow`, `This weekend`, `Next weekend`)
 6. Expand **Advanced** only when needed:
