@@ -537,12 +537,17 @@ export function getPrimaryOffer(offers: ParsedOfferCard[]): ParsedOfferCard | nu
 }
 
 export function getSecondaryOffer(offers: ParsedOfferCard[]): ParsedOfferCard | null {
-  const primary = getPrimaryOffer(offers);
-  if (!primary) {
+  const primaryIndex = offers.findIndex((offer) => offer.recommended);
+  if (primaryIndex === -1) {
+    return offers[1] ?? null;
+  }
+
+  if (offers.length < 2) {
     return null;
   }
 
-  return offers.find((offer) => offer.offerId !== primary.offerId) ?? null;
+  const secondaryIndex = primaryIndex === 0 ? 1 : 0;
+  return offers[secondaryIndex] ?? null;
 }
 
 export function buildDeltaLine(

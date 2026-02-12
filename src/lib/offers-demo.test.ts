@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildOffersGenerateRequest,
   getDefaultOffersDraft,
+  getSecondaryOffer,
   groupReasonCodes,
   parseAdvancedJson,
   parseOffersResponse,
@@ -269,5 +270,19 @@ describe("offers response parser", () => {
     expect(parsed.offers[0]?.paymentSummary).toBe("pay_at_property");
     expect(parsed.reasonCodes).toContain("SELECT_PRIMARY_SAFE");
     expect(parsed.debug.topCandidates[0]?.scoreTotal).toBe(57.9);
+  });
+
+  it("returns a secondary offer even when offerId values are duplicated", () => {
+    const parsed = parseOffersResponse({
+      data: {
+        offers: [
+          { offerId: "rp_flex", recommended: true, roomType: { name: "King" } },
+          { offerId: "rp_flex", recommended: false, roomType: { name: "Queen" } },
+        ],
+      },
+    });
+
+    const secondary = getSecondaryOffer(parsed.offers);
+    expect(secondary?.room).toBe("Queen");
   });
 });

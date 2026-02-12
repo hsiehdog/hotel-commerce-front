@@ -669,8 +669,8 @@ export function OffersDemoDashboard() {
 
                     <div>
                       <p className="mb-2 text-xs font-medium text-muted-foreground">Matched cancellation policy summary</p>
-                      {parsedResponse.offers.map((offer) => (
-                        <p key={`policy-${offer.offerId}`}>
+                      {parsedResponse.offers.map((offer, index) => (
+                        <p key={`policy-${offer.offerId}-${offer.ratePlan}-${index}`}>
                           {offer.offerId}: {offer.cancellationSummary}
                         </p>
                       ))}
