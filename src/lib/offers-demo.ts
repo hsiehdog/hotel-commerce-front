@@ -20,7 +20,6 @@ export type OffersGenerateRequest = {
   pet_friendly?: boolean;
   accessible_room?: boolean;
   needs_two_beds?: boolean;
-  budget_cap?: number;
   parking_needed?: boolean;
   stub_scenario?: string;
   debug: boolean;
@@ -41,7 +40,6 @@ export type OffersDraft = {
   pet_friendly: boolean;
   accessible_room: boolean;
   needs_two_beds: boolean;
-  budget_cap: string;
   parking_needed: boolean;
   stub_scenario: string;
   extraJson: string;
@@ -57,87 +55,115 @@ export type ScenarioPreset = {
 
 export const scenarioPresets: ScenarioPreset[] = [
   {
-    id: "family-stay",
-    label: "Family stay",
-    description: "Family profile with child ages",
+    id: "solo-near-term-web",
+    label: "Solo near-term web",
+    description: "Baseline SAFE-first profile",
     values: {
-      property_id: "hotel-lake-001",
       channel: "web",
-      check_in: "2026-05-12",
-      check_out: "2026-05-16",
-      currency: "USD",
-      rooms: "1",
-      adults: "2",
-      children: "2",
-      child_ages: [5, 8],
-      roomOccupancies: [{ adults: 2, children: 2 }],
-      needs_two_beds: true,
-      stub_scenario: "family_space_priority",
-    },
-  },
-  {
-    id: "short-stay",
-    label: "Short stay",
-    description: "Single-night profile with standard constraints",
-    values: {
-      property_id: "hotel-city-007",
-      channel: "voice",
-      check_in: "2026-04-03",
-      check_out: "2026-04-05",
-      currency: "USD",
+      check_in: "2026-03-20",
+      check_out: "2026-03-22",
       rooms: "1",
       adults: "1",
       children: "0",
       child_ages: [],
       roomOccupancies: [{ adults: 1, children: 0 }],
-      parking_needed: true,
-      stub_scenario: "solo_short_stay",
     },
   },
   {
-    id: "high-demand-weekend",
-    label: "High-demand weekend",
-    description: "Compression demand profile with tighter controls",
+    id: "family-trip",
+    label: "Family trip",
+    description: "Family profile with likely family-fit enhancement",
     values: {
-      property_id: "hotel-stadium-021",
-      channel: "agent",
-      check_in: "2026-09-18",
-      check_out: "2026-09-20",
-      currency: "USD",
-      rooms: "2",
-      adults: "4",
-      children: "0",
-      child_ages: [],
-      roomOccupancies: [
-        { adults: 2, children: 0 },
-        { adults: 2, children: 0 },
-      ],
-      stub_scenario: "compression_weekend_event",
-    },
-    extraJson: {
-      demand_signal: "high",
-    },
-  },
-  {
-    id: "price-sensitive-guest",
-    label: "Price-sensitive guest",
-    description: "Cost-first selection path with saver fallback",
-    values: {
-      property_id: "hotel-euro-014",
       channel: "web",
       check_in: "2026-06-10",
       check_out: "2026-06-13",
-      currency: "USD",
+      rooms: "1",
+      adults: "2",
+      children: "2",
+      child_ages: [7, 10],
+      roomOccupancies: [{ adults: 2, children: 2 }],
+    },
+  },
+  {
+    id: "accessible-required",
+    label: "Accessible required",
+    description: "Strict room filtering for accessibility",
+    values: {
+      channel: "web",
+      check_in: "2026-05-08",
+      check_out: "2026-05-10",
       rooms: "1",
       adults: "2",
       children: "0",
       child_ages: [],
       roomOccupancies: [{ adults: 2, children: 0 }],
-      budget_cap: "350",
-      stub_scenario: "price_sensitive_guest",
+      accessible_room: true,
     },
-    extraJson: {
-      budget_priority: "high",
+  },
+  {
+    id: "two-beds-required",
+    label: "Two beds required",
+    description: "Filters out king-only options",
+    values: {
+      channel: "web",
+      check_in: "2026-05-08",
+      check_out: "2026-05-10",
+      rooms: "1",
+      adults: "2",
+      children: "0",
+      child_ages: [],
+      roomOccupancies: [{ adults: 2, children: 0 }],
+      needs_two_beds: true,
+    },
+  },
+  {
+    id: "pet-friendly",
+    label: "Pet-friendly",
+    description: "Pet fee enhancement and pricing impact",
+    values: {
+      channel: "web",
+      check_in: "2026-04-18",
+      check_out: "2026-04-20",
+      rooms: "1",
+      adults: "2",
+      children: "0",
+      child_ages: [],
+      roomOccupancies: [{ adults: 2, children: 0 }],
+      pet_friendly: true,
+    },
+  },
+  {
+    id: "parking-needed",
+    label: "Parking needed",
+    description: "Parking enhancement and pricing impact",
+    values: {
+      channel: "web",
+      check_in: "2026-04-18",
+      check_out: "2026-04-20",
+      rooms: "1",
+      adults: "2",
+      children: "0",
+      child_ages: [],
+      roomOccupancies: [{ adults: 2, children: 0 }],
+      parking_needed: true,
+    },
+  },
+  {
+    id: "multi-room-distribution",
+    label: "Multi-room distribution",
+    description: "Two-room occupancy split with family profile",
+    values: {
+      channel: "agent",
+      check_in: "2026-07-02",
+      check_out: "2026-07-05",
+      rooms: "2",
+      adults: "4",
+      children: "2",
+      child_ages: [5, 9],
+      roomOccupancies: [
+        { adults: 2, children: 1 },
+        { adults: 2, children: 1 },
+      ],
     },
   },
 ];
@@ -162,7 +188,7 @@ export class OffersRequestError extends Error {
 
 export function getDefaultOffersDraft(): OffersDraft {
   return {
-    property_id: "hotel-demo-001",
+    property_id: "demo_property",
     channel: "web",
     check_in: "",
     check_out: "",
@@ -176,26 +202,10 @@ export function getDefaultOffersDraft(): OffersDraft {
     pet_friendly: false,
     accessible_room: false,
     needs_two_beds: false,
-    budget_cap: "",
     parking_needed: false,
     stub_scenario: "",
     extraJson: "",
   };
-}
-
-export function getComputedNights(checkIn: string, checkOut: string): number | null {
-  if (!checkIn || !checkOut) {
-    return null;
-  }
-
-  const start = new Date(checkIn);
-  const end = new Date(checkOut);
-  if (!(end > start)) {
-    return null;
-  }
-
-  const ms = end.getTime() - start.getTime();
-  return Math.round(ms / (1000 * 60 * 60 * 24));
 }
 
 export function parseAdvancedJson(input: string): {
@@ -284,13 +294,6 @@ export function validateOffersDraft(
     }
   }
 
-  if (draft.budget_cap.trim()) {
-    const budgetCap = Number(draft.budget_cap);
-    if (!Number.isFinite(budgetCap) || budgetCap <= 0) {
-      errors.push("budget_cap must be a number greater than 0 when provided.");
-    }
-  }
-
   if (advancedJsonError) {
     errors.push(advancedJsonError);
   }
@@ -307,7 +310,7 @@ export function buildOffersGenerateRequest(
     channel: draft.channel,
     check_in: draft.check_in,
     check_out: draft.check_out,
-    currency: draft.currency.trim().toUpperCase(),
+    currency: "USD",
     rooms: Number(draft.rooms),
     adults: Number(draft.adults),
     children: Number(draft.children),
@@ -324,10 +327,6 @@ export function buildOffersGenerateRequest(
 
   if (draft.nights.trim()) {
     payload.nights = Number(draft.nights);
-  }
-
-  if (draft.budget_cap.trim()) {
-    payload.budget_cap = Number(draft.budget_cap);
   }
 
   return payload;

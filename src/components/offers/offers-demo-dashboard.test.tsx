@@ -130,7 +130,6 @@ describe("OffersDemoDashboard", () => {
     await user.click(screen.getByLabelText("accessible_room"));
     await user.click(screen.getByLabelText("needs_two_beds"));
     await user.click(screen.getByLabelText("parking_needed"));
-    await user.type(screen.getByLabelText("budget_cap (optional)"), "500");
 
     await user.click(screen.getByRole("button", { name: "Run Offer Decision" }));
 
@@ -144,7 +143,6 @@ describe("OffersDemoDashboard", () => {
         accessible_room: true,
         needs_two_beds: true,
         parking_needed: true,
-        budget_cap: 500,
       }),
     );
     expect(mockedRequestOfferGeneration.mock.calls[0]?.[0]).not.toHaveProperty("preferences");

@@ -27,7 +27,6 @@ describe("offers demo request builder", () => {
       pet_friendly: true,
       accessible_room: true,
       needs_two_beds: false,
-      budget_cap: "450",
       parking_needed: true,
       currency: "usd",
       stub_scenario: "family_space_priority",
@@ -45,7 +44,6 @@ describe("offers demo request builder", () => {
     expect(payload.pet_friendly).toBe(true);
     expect(payload.accessible_room).toBe(true);
     expect(payload.parking_needed).toBe(true);
-    expect(payload.budget_cap).toBe(450);
     expect(payload).not.toHaveProperty("preferences");
     expect((payload as Record<string, unknown>).request).toBeUndefined();
     expect((payload as Record<string, unknown>).payload).toBeUndefined();
@@ -68,24 +66,6 @@ describe("offers demo request builder", () => {
 
     expect(errors).toContain("child_ages length must match children.");
     expect(errors).toContain("Advanced JSON is not valid JSON.");
-  });
-
-  it("validates budget_cap when provided", () => {
-    const draft = {
-      ...getDefaultOffersDraft(),
-      property_id: "hotel-test-1",
-      check_in: "2026-01-02",
-      check_out: "2026-01-03",
-      rooms: "1",
-      adults: "2",
-      children: "0",
-      child_ages: [],
-      roomOccupancies: [{ adults: 2, children: 0 }],
-      budget_cap: "-10",
-    };
-
-    const errors = validateOffersDraft(draft, null);
-    expect(errors).toContain("budget_cap must be a number greater than 0 when provided.");
   });
 
   it("parses advanced JSON object and rejects non-object payloads", () => {

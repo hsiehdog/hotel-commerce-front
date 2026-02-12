@@ -15,7 +15,6 @@ import {
   ParsedOffersResponse,
   buildDeltaLine,
   buildOffersGenerateRequest,
-  getComputedNights,
   getDefaultOffersDraft,
   getPrimaryOffer,
   getSecondaryOffer,
@@ -73,10 +72,6 @@ export function OffersDemoDashboard() {
   const [selectedFunnelStage, setSelectedFunnelStage] = useState<string>("active-basis");
 
   const advancedJson = useMemo(() => parseAdvancedJson(draft.extraJson), [draft.extraJson]);
-  const computedNights = useMemo(
-    () => getComputedNights(draft.check_in, draft.check_out),
-    [draft.check_in, draft.check_out],
-  );
   const requestPreview = useMemo(
     () => buildOffersGenerateRequest(draft, advancedJson.data),
     [advancedJson.data, draft],
@@ -190,33 +185,6 @@ export function OffersDemoDashboard() {
     setFormErrors([]);
     setApiError(null);
     setCopyMessage(null);
-  }
-
-  function applyQuickDate(kind: "tonight" | "tomorrow" | "this-weekend" | "next-weekend") {
-    const now = new Date();
-    let checkIn = addDays(now, 0);
-    let checkOut = addDays(now, 1);
-
-    if (kind === "tomorrow") {
-      checkIn = addDays(now, 1);
-      checkOut = addDays(now, 2);
-    }
-
-    if (kind === "this-weekend") {
-      checkIn = getUpcomingWeekendStart(now, 0);
-      checkOut = addDays(checkIn, 2);
-    }
-
-    if (kind === "next-weekend") {
-      checkIn = getUpcomingWeekendStart(now, 7);
-      checkOut = addDays(checkIn, 2);
-    }
-
-    setDraft((prev) => ({
-      ...prev,
-      check_in: toIsoDate(checkIn),
-      check_out: toIsoDate(checkOut),
-    }));
   }
 
   async function copyJson(label: string, value: unknown) {
@@ -355,16 +323,20 @@ export function OffersDemoDashboard() {
 
                 <section className="space-y-3">
                   <h3 className="text-sm font-semibold">Guest request details</h3>
-                  <div className="grid gap-4 md:grid-cols-3">
+                  <div className="grid gap-4 md:grid-cols-2">
                     <div className="space-y-2">
                       <Label htmlFor="property_id">property_id</Label>
-                      <Input
+                      <select
                         id="property_id"
                         value={draft.property_id}
                         onChange={(event) =>
                           setDraft((prev) => ({ ...prev, property_id: event.target.value }))
                         }
-                      />
+                        className="border-input focus-visible:border-ring focus-visible:ring-ring/50 h-9 w-full rounded-md border bg-transparent px-3 text-sm outline-none focus-visible:ring-[3px]"
+                      >
+                        <option value="demo_property">demo_property</option>
+                        <option value="inn_at_mount_shasta">inn_at_mount_shasta</option>
+                      </select>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="channel">channel</Label>
@@ -383,34 +355,6 @@ export function OffersDemoDashboard() {
                         <option value="voice">voice</option>
                         <option value="agent">agent</option>
                       </select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="currency">currency</Label>
-                      <Input
-                        id="currency"
-                        value={draft.currency}
-                        onChange={(event) =>
-                          setDraft((prev) => ({ ...prev, currency: event.target.value.toUpperCase() }))
-                        }
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <p className="text-xs font-medium text-muted-foreground">Quick stay dates</p>
-                    <div className="flex flex-wrap gap-2">
-                      <Button type="button" size="sm" variant="outline" onClick={() => applyQuickDate("tonight")}>
-                        Tonight
-                      </Button>
-                      <Button type="button" size="sm" variant="outline" onClick={() => applyQuickDate("tomorrow")}>
-                        Tomorrow
-                      </Button>
-                      <Button type="button" size="sm" variant="outline" onClick={() => applyQuickDate("this-weekend")}>
-                        This weekend
-                      </Button>
-                      <Button type="button" size="sm" variant="outline" onClick={() => applyQuickDate("next-weekend")}>
-                        Next weekend
-                      </Button>
                     </div>
                   </div>
 
@@ -461,7 +405,7 @@ export function OffersDemoDashboard() {
                     </div>
                   </div>
 
-                  <div className="grid gap-4 md:grid-cols-3">
+                  <div className="grid gap-4 md:grid-cols-1">
                     <div className="space-y-2">
                       <Label htmlFor="children">children</Label>
                       <Input
@@ -471,25 +415,6 @@ export function OffersDemoDashboard() {
                         value={draft.children}
                         onChange={(event) => handleChildrenChange(event.target.value)}
                       />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="nights">nights override (optional)</Label>
-                      <Input
-                        id="nights"
-                        type="number"
-                        min={1}
-                        value={draft.nights}
-                        onChange={(event) =>
-                          setDraft((prev) => ({ ...prev, nights: event.target.value }))
-                        }
-                        placeholder="auto"
-                      />
-                    </div>
-                    <div className="rounded-md border bg-muted/20 p-3">
-                      <p className="text-xs text-muted-foreground">Computed nights</p>
-                      <p className="mt-1 font-medium">
-                        {computedNights === null ? "Select valid dates" : `${computedNights} night(s)`}
-                      </p>
                     </div>
                   </div>
 
@@ -622,19 +547,6 @@ export function OffersDemoDashboard() {
                         />
                         parking_needed
                       </label>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="budget_cap">budget_cap (optional)</Label>
-                      <Input
-                        id="budget_cap"
-                        type="number"
-                        min={1}
-                        value={draft.budget_cap}
-                        onChange={(event) =>
-                          setDraft((prev) => ({ ...prev, budget_cap: event.target.value }))
-                        }
-                        placeholder="400"
-                      />
                     </div>
                   </div>
                 </section>
@@ -1606,7 +1518,6 @@ function buildNotUsedInputs(
     { label: "accessible_room", value: requestPayload.accessible_room, token: "accessible" },
     { label: "needs_two_beds", value: requestPayload.needs_two_beds, token: "two bed" },
     { label: "parking_needed", value: requestPayload.parking_needed, token: "parking" },
-    { label: "budget_cap", value: requestPayload.budget_cap, token: "budget" },
   ];
 
   return checks
@@ -1985,21 +1896,4 @@ function safeStringify(value: unknown): string {
   } catch {
     return "Unable to stringify value.";
   }
-}
-
-function toIsoDate(date: Date): string {
-  return date.toISOString().slice(0, 10);
-}
-
-function addDays(date: Date, amount: number): Date {
-  const next = new Date(date);
-  next.setDate(next.getDate() + amount);
-  return next;
-}
-
-function getUpcomingWeekendStart(baseDate: Date, minOffsetDays: number): Date {
-  const start = addDays(baseDate, minOffsetDays);
-  const day = start.getDay();
-  const distanceToFriday = (5 - day + 7) % 7;
-  return addDays(start, distanceToFriday);
 }
