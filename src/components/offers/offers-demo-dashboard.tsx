@@ -15,7 +15,6 @@ import {
   ParsedOffersResponse,
   buildDeltaLine,
   buildOffersGenerateRequest,
-  compareRuns,
   getComputedNights,
   getDefaultOffersDraft,
   getPrimaryOffer,
@@ -68,7 +67,6 @@ export function OffersDemoDashboard() {
   const [requestPayload, setRequestPayload] = useState<Record<string, unknown> | null>(null);
   const [rawResponse, setRawResponse] = useState<unknown>(null);
   const [parsedResponse, setParsedResponse] = useState<ParsedOffersResponse | null>(null);
-  const [previousResponse, setPreviousResponse] = useState<ParsedOffersResponse | null>(null);
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
   const [activeDebugTab, setActiveDebugTab] = useState<DebugTab>("summary");
   const [expandedCandidate, setExpandedCandidate] = useState<string | null>(null);
@@ -83,13 +81,6 @@ export function OffersDemoDashboard() {
     () => buildOffersGenerateRequest(draft, advancedJson.data),
     [advancedJson.data, draft],
   );
-
-  const runComparison = useMemo(() => {
-    if (!parsedResponse) {
-      return null;
-    }
-    return compareRuns(previousResponse, parsedResponse);
-  }, [parsedResponse, previousResponse]);
 
   const primaryOffer = parsedResponse ? getPrimaryOffer(parsedResponse.offers) : null;
   const secondaryOffer = parsedResponse ? getSecondaryOffer(parsedResponse.offers) : null;
@@ -164,7 +155,6 @@ export function OffersDemoDashboard() {
       const response = await requestOfferGeneration(payload);
       const parsed = parseOffersResponse(response);
 
-      setPreviousResponse(parsedResponse);
       setParsedResponse(parsed);
       setRawResponse(response);
       setCopyMessage(null);
@@ -237,10 +227,6 @@ export function OffersDemoDashboard() {
 
     await navigator.clipboard.writeText(JSON.stringify(value, null, 2));
     setCopyMessage(`${label} copied to clipboard.`);
-  }
-
-  async function saveScenario() {
-    await copyJson("Scenario request", requestPreview);
   }
 
   async function downloadDecisionReport() {
@@ -656,9 +642,9 @@ export function OffersDemoDashboard() {
                 {isAdvanced && (
                   <section className="space-y-3 rounded-md border bg-muted/10 p-4">
                     <h3 className="text-sm font-semibold">Advanced controls</h3>
-                    <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
                       <div className="space-y-2">
-                        <Label htmlFor="stub_scenario">Demo scenario (advanced)</Label>
+                        <Label htmlFor="stub_scenario">Demo scenario</Label>
                         <Input
                           id="stub_scenario"
                           value={draft.stub_scenario}
@@ -668,17 +654,6 @@ export function OffersDemoDashboard() {
                           placeholder="price_sensitive_guest"
                         />
                       </div>
-                      <label className="flex items-center gap-2 self-end text-sm">
-                        <input
-                          type="checkbox"
-                          checked={draft.debug}
-                          onChange={(event) =>
-                            setDraft((prev) => ({ ...prev, debug: event.target.checked }))
-                          }
-                          className="h-4 w-4 rounded border-input"
-                        />
-                        Explainability mode
-                      </label>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="extra-json">Raw JSON override (object)</Label>
@@ -715,17 +690,6 @@ export function OffersDemoDashboard() {
                 <div className="flex flex-wrap gap-2">
                   <Button type="submit" disabled={isSubmitting}>
                     {isSubmitting ? "Running..." : "Run Offer Decision"}
-                  </Button>
-                  <Button type="button" variant="secondary" onClick={saveScenario}>
-                    Save Scenario
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setActiveDebugTab("summary")}
-                    disabled={!runComparison}
-                  >
-                    Compare Runs
                   </Button>
                   <Button
                     type="button"
@@ -1175,21 +1139,6 @@ export function OffersDemoDashboard() {
                     <p>Currency: {parsedResponse.currency}</p>
                     <p>Price basis used: {parsedResponse.priceBasisUsed}</p>
                     <p>Config version: {parsedResponse.configVersion}</p>
-                    {runComparison ? (
-                      <div className="rounded-md border p-3">
-                        <p className="font-medium">Run comparison</p>
-                        <p>Added offers: {runComparison.changedOfferIds.added.join(", ") || "none"}</p>
-                        <p>Removed offers: {runComparison.changedOfferIds.removed.join(", ") || "none"}</p>
-                        {runComparison.summaryChanges.map((change) => (
-                          <p key={change}>{change}</p>
-                        ))}
-                        {runComparison.summaryChanges.length === 0 &&
-                          runComparison.changedOfferIds.added.length === 0 &&
-                          runComparison.changedOfferIds.removed.length === 0 && <p>No key differences.</p>}
-                      </div>
-                    ) : (
-                      <p className="text-muted-foreground">Run a second decision to compare runs.</p>
-                    )}
                   </div>
                 )}
 

@@ -44,7 +44,6 @@ export type OffersDraft = {
   budget_cap: string;
   parking_needed: boolean;
   stub_scenario: string;
-  debug: boolean;
   extraJson: string;
 };
 
@@ -74,7 +73,6 @@ export const scenarioPresets: ScenarioPreset[] = [
       roomOccupancies: [{ adults: 2, children: 2 }],
       needs_two_beds: true,
       stub_scenario: "family_space_priority",
-      debug: true,
     },
   },
   {
@@ -94,7 +92,6 @@ export const scenarioPresets: ScenarioPreset[] = [
       roomOccupancies: [{ adults: 1, children: 0 }],
       parking_needed: true,
       stub_scenario: "solo_short_stay",
-      debug: true,
     },
   },
   {
@@ -116,7 +113,6 @@ export const scenarioPresets: ScenarioPreset[] = [
         { adults: 2, children: 0 },
       ],
       stub_scenario: "compression_weekend_event",
-      debug: true,
     },
     extraJson: {
       demand_signal: "high",
@@ -139,7 +135,6 @@ export const scenarioPresets: ScenarioPreset[] = [
       roomOccupancies: [{ adults: 2, children: 0 }],
       budget_cap: "350",
       stub_scenario: "price_sensitive_guest",
-      debug: true,
     },
     extraJson: {
       budget_priority: "high",
@@ -184,7 +179,6 @@ export function getDefaultOffersDraft(): OffersDraft {
     budget_cap: "",
     parking_needed: false,
     stub_scenario: "",
-    debug: true,
     extraJson: "",
   };
 }
@@ -324,7 +318,7 @@ export function buildOffersGenerateRequest(
     needs_two_beds: draft.needs_two_beds,
     parking_needed: draft.parking_needed,
     stub_scenario: draft.stub_scenario.trim() || undefined,
-    debug: draft.debug,
+    debug: true,
     ...advancedFields,
   };
 
@@ -614,53 +608,6 @@ export async function requestOfferGeneration(
   }
 
   return body;
-}
-
-export type RunComparison = {
-  changedOfferIds: {
-    added: string[];
-    removed: string[];
-  };
-  summaryChanges: string[];
-};
-
-export function compareRuns(
-  previous: ParsedOffersResponse | null,
-  current: ParsedOffersResponse,
-): RunComparison | null {
-  if (!previous) {
-    return null;
-  }
-
-  const previousIds = new Set(previous.offers.map((offer) => offer.offerId));
-  const currentIds = new Set(current.offers.map((offer) => offer.offerId));
-
-  const added = Array.from(currentIds).filter((id) => !previousIds.has(id));
-  const removed = Array.from(previousIds).filter((id) => !currentIds.has(id));
-
-  const summaryChanges: string[] = [];
-
-  if (previous.priceBasisUsed !== current.priceBasisUsed) {
-    summaryChanges.push(
-      `priceBasisUsed: ${previous.priceBasisUsed} -> ${current.priceBasisUsed}`,
-    );
-  }
-  if (previous.configVersion !== current.configVersion) {
-    summaryChanges.push(
-      `configVersion: ${previous.configVersion} -> ${current.configVersion}`,
-    );
-  }
-  if (previous.currency !== current.currency) {
-    summaryChanges.push(`currency: ${previous.currency} -> ${current.currency}`);
-  }
-
-  return {
-    changedOfferIds: {
-      added,
-      removed,
-    },
-    summaryChanges,
-  };
 }
 
 function parsePropertyContext(

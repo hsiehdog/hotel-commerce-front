@@ -28,12 +28,11 @@ describe("OffersDemoDashboard", () => {
 
     render(<OffersDemoDashboard />);
 
-    expect(screen.queryByLabelText("Demo scenario (advanced)")).toBeNull();
+    expect(screen.queryByLabelText("Demo scenario")).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "Advanced" }));
 
-    expect(screen.getByLabelText("Demo scenario (advanced)")).toBeTruthy();
-    expect(screen.getByLabelText("Explainability mode")).toBeTruthy();
+    expect(screen.getByLabelText("Demo scenario")).toBeTruthy();
   });
 
   it("renders single-screen decision audit trail when response includes debug payload", async () => {

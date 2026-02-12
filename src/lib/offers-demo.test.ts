@@ -29,7 +29,6 @@ describe("offers demo request builder", () => {
       needs_two_beds: false,
       budget_cap: "450",
       parking_needed: true,
-      debug: true,
       currency: "usd",
       stub_scenario: "family_space_priority",
     };
