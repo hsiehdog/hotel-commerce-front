@@ -292,6 +292,39 @@ export function RequestForm({
                   />
                   Parking
                 </label>
+                <label className="flex items-center gap-2 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={draft.breakfast_package}
+                    onChange={(event) =>
+                      setDraft((prev) => ({ ...prev, breakfast_package: event.target.checked }))
+                    }
+                    className="h-3.5 w-3.5 rounded border-input"
+                  />
+                  Breakfast package
+                </label>
+                <label className="flex items-center gap-2 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={draft.early_check_in}
+                    onChange={(event) =>
+                      setDraft((prev) => ({ ...prev, early_check_in: event.target.checked }))
+                    }
+                    className="h-3.5 w-3.5 rounded border-input"
+                  />
+                  Early check-in
+                </label>
+                <label className="flex items-center gap-2 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={draft.late_check_out}
+                    onChange={(event) =>
+                      setDraft((prev) => ({ ...prev, late_check_out: event.target.checked }))
+                    }
+                    className="h-3.5 w-3.5 rounded border-input"
+                  />
+                  Late check-out
+                </label>
               </div>
             </div>
           </section>

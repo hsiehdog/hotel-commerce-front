@@ -21,6 +21,9 @@ export type OffersGenerateRequest = {
   accessible_room?: boolean;
   needs_two_beds?: boolean;
   parking_needed?: boolean;
+  breakfast_package?: boolean;
+  early_check_in?: boolean;
+  late_check_out?: boolean;
   stub_scenario?: string;
   debug: boolean;
 } & Record<string, unknown>;
@@ -41,6 +44,9 @@ export type OffersDraft = {
   accessible_room: boolean;
   needs_two_beds: boolean;
   parking_needed: boolean;
+  breakfast_package: boolean;
+  early_check_in: boolean;
+  late_check_out: boolean;
   stub_scenario: string;
   extraJson: string;
 };
@@ -203,6 +209,9 @@ export function getDefaultOffersDraft(): OffersDraft {
     accessible_room: false,
     needs_two_beds: false,
     parking_needed: false,
+    breakfast_package: false,
+    early_check_in: false,
+    late_check_out: false,
     stub_scenario: "",
     extraJson: "",
   };
@@ -320,6 +329,9 @@ export function buildOffersGenerateRequest(
     accessible_room: draft.accessible_room,
     needs_two_beds: draft.needs_two_beds,
     parking_needed: draft.parking_needed,
+    breakfast_package: draft.breakfast_package,
+    early_check_in: draft.early_check_in,
+    late_check_out: draft.late_check_out,
     stub_scenario: draft.stub_scenario.trim() || undefined,
     debug: true,
     ...advancedFields,

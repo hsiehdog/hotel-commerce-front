@@ -148,6 +148,9 @@ describe("OffersDemoDashboard", () => {
     await user.click(screen.getByLabelText("Accessible"));
     await user.click(screen.getByLabelText("Two beds"));
     await user.click(screen.getByLabelText("Parking"));
+    await user.click(screen.getByLabelText("Breakfast package"));
+    await user.click(screen.getByLabelText("Early check-in"));
+    await user.click(screen.getByLabelText("Late check-out"));
 
     await user.click(screen.getByRole("button", { name: "Run Decision" }));
 
@@ -161,6 +164,9 @@ describe("OffersDemoDashboard", () => {
         accessible_room: true,
         needs_two_beds: true,
         parking_needed: true,
+        breakfast_package: true,
+        early_check_in: true,
+        late_check_out: true,
       }),
     );
     expect(mockedRequestOfferGeneration.mock.calls[0]?.[0]).not.toHaveProperty("preferences");

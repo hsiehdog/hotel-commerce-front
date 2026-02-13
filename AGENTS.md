@@ -64,6 +64,10 @@ Refactor style:
 - `pnpm lint`
 - `pnpm build`
 
+## Commit keyword behavior
+
+- When the user says `commit`, run `git diff`, write an appropriate commit message based on the changed files, then run `git commit` with that message.
+
 ---
 
 ## Security
