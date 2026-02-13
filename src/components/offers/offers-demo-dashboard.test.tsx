@@ -108,8 +108,8 @@ describe("OffersDemoDashboard", () => {
 
     render(<OffersDemoDashboard />);
 
-    await user.type(screen.getByLabelText("check_in"), "2026-03-10");
-    await user.type(screen.getByLabelText("check_out"), "2026-03-12");
+    await user.type(screen.getByLabelText("Check-in"), "2026-03-10");
+    await user.type(screen.getByLabelText("Check-out"), "2026-03-12");
 
     await user.click(screen.getByRole("button", { name: "Run Decision" }));
 
@@ -141,13 +141,13 @@ describe("OffersDemoDashboard", () => {
 
     render(<OffersDemoDashboard />);
 
-    await user.type(screen.getByLabelText("check_in"), "2026-06-10");
-    await user.type(screen.getByLabelText("check_out"), "2026-06-13");
+    await user.type(screen.getByLabelText("Check-in"), "2026-06-10");
+    await user.type(screen.getByLabelText("Check-out"), "2026-06-13");
 
-    await user.click(screen.getByLabelText("pet_friendly"));
-    await user.click(screen.getByLabelText("accessible"));
-    await user.click(screen.getByLabelText("two_beds"));
-    await user.click(screen.getByLabelText("parking"));
+    await user.click(screen.getByLabelText("Pet friendly"));
+    await user.click(screen.getByLabelText("Accessible"));
+    await user.click(screen.getByLabelText("Two beds"));
+    await user.click(screen.getByLabelText("Parking"));
 
     await user.click(screen.getByRole("button", { name: "Run Decision" }));
 

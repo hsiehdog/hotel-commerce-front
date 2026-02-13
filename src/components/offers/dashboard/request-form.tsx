@@ -137,7 +137,7 @@ export function RequestForm({
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Details</p>
             <div className="grid gap-3">
               <div className="space-y-1">
-                <Label htmlFor="property_id" className="text-xs">property_id</Label>
+                <Label htmlFor="property_id" className="text-xs">Property</Label>
                 <select
                   id="property_id"
                   value={draft.property_id}
@@ -153,7 +153,7 @@ export function RequestForm({
 
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
-                  <Label htmlFor="check_in" className="text-xs">check_in</Label>
+                  <Label htmlFor="check_in" className="text-xs">Check-in</Label>
                   <Input
                     id="check_in"
                     type="date"
@@ -165,7 +165,7 @@ export function RequestForm({
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label htmlFor="check_out" className="text-xs">check_out</Label>
+                  <Label htmlFor="check_out" className="text-xs">Check-out</Label>
                   <Input
                     id="check_out"
                     type="date"
@@ -180,7 +180,7 @@ export function RequestForm({
 
               <div className="grid grid-cols-3 gap-2">
                  <div className="space-y-1">
-                  <Label htmlFor="rooms" className="text-xs">rooms</Label>
+                  <Label htmlFor="rooms" className="text-xs">Rooms</Label>
                   <Input
                     id="rooms"
                     type="number"
@@ -191,7 +191,7 @@ export function RequestForm({
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label htmlFor="adults" className="text-xs">adults</Label>
+                  <Label htmlFor="adults" className="text-xs">Adults</Label>
                   <Input
                     id="adults"
                     type="number"
@@ -204,7 +204,7 @@ export function RequestForm({
                   />
                 </div>
                  <div className="space-y-1">
-                  <Label htmlFor="children" className="text-xs">children</Label>
+                  <Label htmlFor="children" className="text-xs">Children</Label>
                   <Input
                     id="children"
                     type="number"
@@ -219,7 +219,7 @@ export function RequestForm({
 
             {draft.child_ages.length > 0 && (
               <div className="space-y-1">
-                <Label className="text-xs">child_ages</Label>
+                <Label className="text-xs">Child ages</Label>
                 <div className="grid grid-cols-4 gap-2">
                   {draft.child_ages.map((age, index) => (
                     <Input
@@ -257,7 +257,7 @@ export function RequestForm({
                     }
                     className="h-3.5 w-3.5 rounded border-input"
                   />
-                  pet_friendly
+                  Pet friendly
                 </label>
                 <label className="flex items-center gap-2 text-xs">
                   <input
@@ -268,7 +268,7 @@ export function RequestForm({
                     }
                     className="h-3.5 w-3.5 rounded border-input"
                   />
-                  accessible
+                  Accessible
                 </label>
                 <label className="flex items-center gap-2 text-xs">
                   <input
@@ -279,7 +279,7 @@ export function RequestForm({
                     }
                     className="h-3.5 w-3.5 rounded border-input"
                   />
-                  two_beds
+                  Two beds
                 </label>
                 <label className="flex items-center gap-2 text-xs">
                   <input
@@ -290,7 +290,7 @@ export function RequestForm({
                     }
                     className="h-3.5 w-3.5 rounded border-input"
                   />
-                  parking
+                  Parking
                 </label>
               </div>
             </div>
@@ -313,7 +313,7 @@ export function RequestForm({
                   />
                 </div>
                  <div className="space-y-1">
-                  <Label htmlFor="channel" className="text-xs">channel</Label>
+                  <Label htmlFor="channel" className="text-xs">Channel</Label>
                   <select
                     id="channel"
                     value={draft.channel}

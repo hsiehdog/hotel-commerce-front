@@ -38,9 +38,6 @@ describe("CandidateAnalysis", () => {
   it("hides component columns in main ranking table and strips candidate prefix", () => {
     render(
       <CandidateAnalysis
-        funnelStages={[]}
-        selectedFunnelStage="active-basis"
-        setSelectedFunnelStage={vi.fn()}
         displayedCandidates={[
           {
             offerId: "candidate-alpha",
@@ -92,9 +89,6 @@ describe("CandidateAnalysis", () => {
 
     const { rerender } = render(
       <CandidateAnalysis
-        funnelStages={[]}
-        selectedFunnelStage="active-basis"
-        setSelectedFunnelStage={vi.fn()}
         displayedCandidates={[candidate]}
         scoringWeights={{ value: 0.7816, conversion: 0.1954, experience: 0.023, margin: 0, risk: 0.13 }}
         expandedCandidate="candidate-beta-0"
@@ -108,9 +102,6 @@ describe("CandidateAnalysis", () => {
 
     rerender(
       <CandidateAnalysis
-        funnelStages={[]}
-        selectedFunnelStage="active-basis"
-        setSelectedFunnelStage={vi.fn()}
         displayedCandidates={[candidate]}
         scoringWeights={{}}
         expandedCandidate="candidate-beta-0"

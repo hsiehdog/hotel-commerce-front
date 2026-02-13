@@ -13,23 +13,11 @@ import {
   asRecord,
   formatMoney,
   scoreCell,
-  toPercent,
   toStringArray,
   safeStringify
 } from "./utils";
 
-export type FunnelStage = {
-  id: string;
-  label: string;
-  count: number;
-  percentOfGenerated: number;
-  candidateIds: string[];
-};
-
 interface CandidateAnalysisProps {
-  funnelStages: FunnelStage[];
-  selectedFunnelStage: string;
-  setSelectedFunnelStage: Dispatch<SetStateAction<string>>;
   displayedCandidates: Array<Record<string, unknown>>;
   scoringWeights: Record<string, unknown>;
   expandedCandidate: string | null;
@@ -38,53 +26,14 @@ interface CandidateAnalysisProps {
 }
 
 export function CandidateAnalysis({
-  funnelStages,
-  selectedFunnelStage,
-  setSelectedFunnelStage,
   displayedCandidates,
   scoringWeights,
   expandedCandidate,
   setExpandedCandidate,
   parsedResponse,
 }: CandidateAnalysisProps) {
-  const activeFunnel = funnelStages.find((stage) => stage.id === selectedFunnelStage);
-
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Candidate Funnel</CardTitle>
-          <CardDescription>Click a stage to inspect impacted candidate rows.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-wrap gap-2">
-            {funnelStages.map((stage) => {
-              const selected = stage.id === (activeFunnel?.id ?? "");
-              return (
-                <button
-                  key={stage.id}
-                  type="button"
-                  onClick={() => setSelectedFunnelStage(stage.id)}
-                  className={cn(
-                    "flex min-w-[140px] flex-col rounded-md border p-3 text-left transition-colors hover:bg-muted/50",
-                    selected && "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30"
-                  )}
-                >
-                  <span className="text-xs font-medium text-muted-foreground">{stage.label}</span>
-                  <div className="mt-2 flex items-baseline gap-1">
-                    <span className="text-xl font-bold">{stage.count}</span>
-                    <span className="text-xs text-muted-foreground">({stage.percentOfGenerated}%)</span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Viewing stage: <span className="font-medium text-foreground">{activeFunnel?.label ?? "Active basis selected"}</span> ({displayedCandidates.length} rows)
-          </p>
-        </CardContent>
-      </Card>
-
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Offer Ranking</CardTitle>

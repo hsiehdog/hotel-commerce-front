@@ -63,7 +63,7 @@ export function GuestProfile({
               <p>
                 <span className="font-semibold">Conversion:</span>{" "}
                 <span className="font-mono">{(firstNumber(weights.conversion) ?? 0).toFixed(2)}</span>{" "}
-                <span className="text-muted-foreground">(rewards easier booking terms)</span>
+                <span className="text-muted-foreground">(rewards easier booking terms, e.g. refundable, pay at property)</span>
               </p>
               <p>
                 <span className="font-semibold">Experience:</span>{" "}
@@ -78,7 +78,7 @@ export function GuestProfile({
               <p>
                 <span className="font-semibold">Risk:</span>{" "}
                 <span className="font-mono">{(firstNumber(weights.risk) ?? 0).toFixed(2)}</span>{" "}
-                <span className="text-muted-foreground">(captures downside signals and is subtracted from total score)</span>
+                <span className="text-muted-foreground">(captures downside friction e.g. non-refundable, pay now, low inventory)</span>
               </p>
             </div>
             <p className="mt-2 text-xs text-muted-foreground">

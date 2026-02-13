@@ -19,7 +19,6 @@ import {
 } from "@/lib/offers-demo";
 import {
   buildEffectiveConfigRows,
-  buildFunnelStages,
   buildTimelineSteps,
 } from "./dashboard/dashboard-logic";
 import { RequestForm } from "./dashboard/request-form";
@@ -41,7 +40,6 @@ export function OffersDemoDashboard() {
   const [rawResponse, setRawResponse] = useState<unknown>(null);
   const [parsedResponse, setParsedResponse] = useState<ParsedOffersResponse | null>(null);
   const [expandedCandidate, setExpandedCandidate] = useState<string | null>(null);
-  const [selectedFunnelStage, setSelectedFunnelStage] = useState<string>("active-basis");
 
   const advancedJson = useMemo(() => parseAdvancedJson(draft.extraJson), [draft.extraJson]);
   const requestPreview = useMemo(
@@ -55,10 +53,9 @@ export function OffersDemoDashboard() {
   const reasonGroups = groupReasonCodes(parsedResponse?.reasonCodes ?? []);
 
   const selectionSummary = useMemo(() => asRecord(parsedResponse?.debug.selectionSummary), [parsedResponse]);
-  const funnelStages = useMemo(() => buildFunnelStages(parsedResponse), [parsedResponse]);
   const timelineSteps = useMemo(
-    () => buildTimelineSteps(parsedResponse, requestPayload, funnelStages, selectionSummary),
-    [parsedResponse, requestPayload, funnelStages, selectionSummary],
+    () => buildTimelineSteps(parsedResponse, requestPayload, selectionSummary),
+    [parsedResponse, requestPayload, selectionSummary],
   );
 
   const profilePreAri = useMemo(() => asRecord(parsedResponse?.debug.profilePreAri), [parsedResponse]);
@@ -69,21 +66,6 @@ export function OffersDemoDashboard() {
   );
 
   const allCandidates = parsedResponse?.debug.topCandidates ?? [];
-  const activeFunnel = funnelStages.find((stage) => stage.id === selectedFunnelStage) ?? funnelStages.at(-1);
-  const displayedCandidates = useMemo(() => {
-    if (!activeFunnel || activeFunnel.candidateIds.length === 0) {
-      return allCandidates;
-    }
-
-    const ids = new Set(activeFunnel.candidateIds);
-    const filtered = allCandidates.filter((candidate: Record<string, unknown>) => {
-      const offerId = String(candidate.offerId ?? candidate.offer_id ?? "");
-      const candidateId = String(candidate.candidateId ?? candidate.candidate_id ?? "");
-      return ids.has(offerId) || ids.has(candidateId);
-    });
-
-    return filtered.length > 0 ? filtered : allCandidates;
-  }, [activeFunnel, allCandidates]);
 
   const effectiveConfigRows = useMemo(
     () => buildEffectiveConfigRows(parsedResponse, requestPayload),
@@ -111,7 +93,6 @@ export function OffersDemoDashboard() {
 
       setParsedResponse(parsed);
       setRawResponse(response);
-      setSelectedFunnelStage("active-basis");
     } catch (error) {
       if (error instanceof OffersRequestError) {
         setApiError(`Request failed (${error.status}): ${error.message}`);
@@ -206,10 +187,7 @@ export function OffersDemoDashboard() {
 
             <div id="funnel" className="scroll-mt-24">
               <CandidateAnalysis
-                funnelStages={funnelStages}
-                selectedFunnelStage={selectedFunnelStage}
-                setSelectedFunnelStage={setSelectedFunnelStage}
-                displayedCandidates={displayedCandidates}
+                displayedCandidates={allCandidates}
                 scoringWeights={scoringWeights}
                 expandedCandidate={expandedCandidate}
                 setExpandedCandidate={setExpandedCandidate}
