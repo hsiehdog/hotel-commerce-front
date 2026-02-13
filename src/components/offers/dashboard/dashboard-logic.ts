@@ -1,24 +1,19 @@
-
 import {
-  OffersDraft,
   ParsedOffersResponse,
-  ParsedOfferCard,
 } from "@/lib/offers-demo";
 import { TimelineStep } from "./timeline-nav";
 import {
   asRecord,
   firstNumber,
-  inferLeadTimeDays,
-  inferTripTypeFromDraft,
   toPercent,
   toString,
-  countObjectKeys
+  countObjectKeys,
 } from "./utils";
 
 export function buildTimelineSteps(
   parsedResponse: ParsedOffersResponse | null,
   requestPayload: Record<string, unknown> | null,
-  funnelStages: any[], // FunnelStage[]
+  funnelStages: Array<{ count: number }>,
   selectionSummary: Record<string, unknown>,
 ): TimelineStep[] {
   const topCandidates = parsedResponse?.debug.topCandidates.length ?? 0;
@@ -218,79 +213,6 @@ export function buildFunnelStages(parsedResponse: ParsedOffersResponse | null) {
   ];
 }
 
-export function buildWhyChips(
-  profilePreAri: Record<string, unknown>,
-  profileFinal: Record<string, unknown>,
-  resolvedRequest: Record<string, unknown>,
-  draft: OffersDraft,
-): Array<{ label: string; reason: string }> {
-  const chips: Array<{ label: string; reason: string }> = [];
-
-  const leadTimeDays =
-    firstNumber(
-      profileFinal.leadTimeDays,
-      profileFinal.lead_time_days,
-      resolvedRequest.leadTimeDays,
-      resolvedRequest.lead_time_days,
-    ) ?? inferLeadTimeDays(draft.check_in);
-
-  if (leadTimeDays !== null && leadTimeDays <= 1) {
-    chips.push({ label: `leadTimeDays=${leadTimeDays} -> short-lead`, reason: "Short lead time" });
-  }
-
-  const tripType =
-    toString(
-      profilePreAri.tripType ??
-        profilePreAri.trip_type ??
-        profileFinal.tripType ??
-        profileFinal.trip_type,
-    ) || inferTripTypeFromDraft(draft);
-  if (tripType.toLowerCase() === "family") {
-    chips.push({ label: "tripType=family -> family enhancements eligible", reason: "Family trip profile" });
-  }
-
-  const roomsAvailable = firstNumber(
-    profileFinal.roomsAvailable,
-    profileFinal.rooms_available,
-    resolvedRequest.roomsAvailable,
-    resolvedRequest.rooms_available,
-  );
-  if (roomsAvailable !== null && roomsAvailable <= 2) {
-    chips.push({ label: `roomsAvailable=${roomsAvailable} -> inventoryState=low`, reason: "Low inventory state" });
-  }
-
-  return chips;
-}
-
-export function buildTopReasonSummary(
-  parsedResponse: ParsedOffersResponse | null,
-  whyChips: Array<{ label: string; reason: string }>,
-  selectionSummary: Record<string, unknown>,
-  primaryOffer: ParsedOfferCard | null,
-): { primary: string; secondary: string } {
-  if (!parsedResponse) {
-    return {
-      primary: "Run a decision to see primary causality.",
-      secondary: "Run a decision to see secondary fallback causality.",
-    };
-  }
-
-  const reasons = parsedResponse.reasonCodes.map((item) => item.toUpperCase());
-  const topChip = whyChips[0] ?? null;
-  const primaryMode = toString(selectionSummary.primaryArchetype ?? selectionSummary.primary_archetype) || primaryOffer?.type || "PRIMARY";
-  const primary = topChip
-    ? `${topChip.label} -> ${primaryMode} primary`
-    : reasons.find((code) => code.includes("SELECT_PRIMARY")) || "Primary selected based on ranking and guardrails.";
-
-  const noOpposite = reasons.some((code) => code.includes("SECONDARY_POOL_EMPTY_OPPOSITE_ARCHETYPE"));
-  const sameFallback = reasons.some((code) => code.includes("SAME_ARCHETYPE_FALLBACK"));
-  const secondary = noOpposite || sameFallback
-    ? "No opposite-archetype option eligible -> same-archetype fallback (alternate dates/text link/waitlist/contact property)"
-    : reasons.find((code) => code.includes("SELECT_SECONDARY")) || "Secondary chosen as best available tradeoff option.";
-
-  return { primary, secondary };
-}
-
 export function buildEffectiveConfigRows(
   parsedResponse: ParsedOffersResponse | null,
   requestPayload: Record<string, unknown> | null,
@@ -316,34 +238,4 @@ export function buildEffectiveConfigRows(
       impact: "affects filtering",
     },
   ];
-}
-
-export function buildNotUsedInputs(
-  requestPayload: Record<string, unknown> | null,
-  reasonCodes: string[],
-  decisionTrace: unknown,
-): string[] {
-  if (!requestPayload) {
-    return [];
-  }
-
-  const reasons = reasonCodes.join(" ").toLowerCase();
-  const trace = typeof decisionTrace === "string" ? decisionTrace.toLowerCase() : JSON.stringify(decisionTrace ?? {}).toLowerCase();
-  const text = `${reasons} ${trace}`;
-  const checks: Array<{ label: string; value: unknown; token: string }> = [
-    { label: "pet_friendly", value: requestPayload.pet_friendly, token: "pet" },
-    { label: "accessible_room", value: requestPayload.accessible_room, token: "accessible" },
-    { label: "needs_two_beds", value: requestPayload.needs_two_beds, token: "two bed" },
-    { label: "parking_needed", value: requestPayload.parking_needed, token: "parking" },
-  ];
-
-  return checks
-    .filter((item) => {
-      const present = item.value !== undefined && item.value !== null && item.value !== "";
-      if (!present) {
-        return false;
-      }
-      return !text.includes(item.token);
-    })
-    .map((item) => `${item.label}=${String(item.value)}`);
 }

@@ -30,7 +30,7 @@ interface CandidateAnalysisProps {
   funnelStages: FunnelStage[];
   selectedFunnelStage: string;
   setSelectedFunnelStage: Dispatch<SetStateAction<string>>;
-  displayedCandidates: any[]; // using any for raw candidate object flexibility
+  displayedCandidates: Array<Record<string, unknown>>;
   expandedCandidate: string | null;
   setExpandedCandidate: Dispatch<SetStateAction<string | null>>;
   parsedResponse: ParsedOffersResponse;
@@ -88,11 +88,11 @@ export function CandidateAnalysis({
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Offer Ranking</CardTitle>
-          <CardDescription>Candidate-level components, weights, and final score substitution.</CardDescription>
+          <CardDescription>Candidate-level components and final score substitution.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto rounded-md border">
-            <table className="w-full min-w-[1080px] text-left text-sm">
+            <table className="w-full min-w-[980px] text-left text-sm">
               <thead className="bg-muted/50">
                 <tr className="border-b text-xs text-muted-foreground">
                   <th className="px-3 py-2 font-medium">Candidate</th>
@@ -103,7 +103,6 @@ export function CandidateAnalysis({
                   <th className="px-3 py-2 font-medium">Exp</th>
                   <th className="px-3 py-2 font-medium">Margin</th>
                   <th className="px-3 py-2 font-medium">Risk</th>
-                  <th className="px-3 py-2 font-medium">Weights (v/c/e/m/r)</th>
                   <th className="px-3 py-2 font-medium text-right">Final Score</th>
                 </tr>
               </thead>
@@ -168,14 +167,11 @@ export function CandidateAnalysis({
                         <td className="px-3 py-2 font-mono text-xs">{scoreCell(scoring.experience)}</td>
                         <td className="px-3 py-2 font-mono text-xs">{scoreCell(scoring.margin)}</td>
                         <td className="px-3 py-2 font-mono text-xs">{scoreCell(scoring.risk)}</td>
-                        <td className="px-3 py-2 font-mono text-[10px] text-muted-foreground">
-                          {`${scoreCell(scoring.weights.value)} / ${scoreCell(scoring.weights.conversion)} / ${scoreCell(scoring.weights.experience)} / ${scoreCell(scoring.weights.margin)} / ${scoreCell(scoring.weights.risk)}`}
-                        </td>
                         <td className="px-3 py-2 text-right font-mono font-bold text-foreground">{scoreCell(scoring.finalScore)}</td>
                       </tr>
                       {expandedCandidate === rowId && (
                         <tr className="bg-muted/10">
-                          <td className="px-3 py-3" colSpan={10}>
+                          <td className="px-3 py-3" colSpan={9}>
                             <div className="rounded-md border bg-background p-4 shadow-sm">
                               <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Score Calculation</p>
                               <div className="mb-4 rounded bg-muted/30 p-2 font-mono text-xs">
@@ -194,7 +190,7 @@ export function CandidateAnalysis({
                 })}
                 {displayedCandidates.length === 0 && (
                   <tr>
-                    <td className="px-3 py-8 text-center text-muted-foreground" colSpan={10}>
+                    <td className="px-3 py-8 text-center text-muted-foreground" colSpan={9}>
                       No candidates found for this stage.
                     </td>
                   </tr>
@@ -253,13 +249,6 @@ function getScoringModel(candidate: Record<string, unknown>, selectionSummary: R
     margin,
     risk,
     finalScore,
-    weights: {
-      value: valueW,
-      conversion: conversionW,
-      experience: experienceW,
-      margin: marginW,
-      risk: riskW,
-    },
     formula,
   };
 }

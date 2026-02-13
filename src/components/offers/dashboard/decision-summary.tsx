@@ -1,37 +1,19 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ParsedOfferCard } from "@/lib/offers-demo";
 import { cn, formatMoney, toStringArray } from "./utils";
 
 interface DecisionSummaryProps {
-  topReasons: { primary: string; secondary: string };
   primaryOffer: ParsedOfferCard | null;
   secondaryOffer: ParsedOfferCard | null;
   deltaLine: string;
 }
 
-export function DecisionSummary({ topReasons, primaryOffer, secondaryOffer, deltaLine }: DecisionSummaryProps) {
+export function DecisionSummary({ primaryOffer, secondaryOffer, deltaLine }: DecisionSummaryProps) {
   return (
     <div className="space-y-6">
-      <Card className="border-emerald-300/60 bg-emerald-50/40 dark:bg-emerald-950/20">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Why This Changed</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 text-sm md:grid-cols-2">
-          <div className="rounded-md border bg-background/70 p-3 shadow-sm">
-            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Primary</p>
-            <p className="font-medium">{topReasons.primary}</p>
-          </div>
-          <div className="rounded-md border bg-background/70 p-3 shadow-sm">
-            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Secondary</p>
-            <p className="font-medium">{topReasons.secondary}</p>
-          </div>
-        </CardContent>
-      </Card>
-
       <div className="grid gap-6 xl:grid-cols-2">
         <DecisionOfferCard title="Primary Offer" offer={primaryOffer} highlighted />
         <DecisionOfferCard title="Secondary Offer" offer={secondaryOffer} highlighted={false} />

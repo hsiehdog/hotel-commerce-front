@@ -68,10 +68,23 @@ describe("OffersDemoDashboard", () => {
         },
       ],
       debug: {
-        selectionSummary: { selectedOfferId: "offer-safe" },
+        selectionSummary: {
+          selectedOfferId: "offer-safe",
+        },
+        scoring: {
+          weights: {
+            value: 0.3,
+            conversion: 0.35,
+            experience: 0.1,
+            margin: 0.1,
+            risk: 0.15,
+          },
+        },
         resolvedRequest: { property_id: "hotel-9" },
         profilePreAri: { profile: "pre" },
         profileFinal: {
+          tripType: "family",
+          decisionPosture: "safe",
           capabilities: {
             text_link: true,
             waitlist: true,
@@ -101,10 +114,14 @@ describe("OffersDemoDashboard", () => {
     await user.click(screen.getByRole("button", { name: "Run Decision" }));
 
     await waitFor(() => {
-      expect(screen.getByText("Why This Changed")).toBeTruthy();
+      expect(screen.getByText("Primary Offer")).toBeTruthy();
     });
 
-    expect(screen.getByText("Guest Intent Profile")).toBeTruthy();
+    expect(screen.getByText("User Profile")).toBeTruthy();
+    expect(screen.getByText("family")).toBeTruthy();
+    expect(screen.getByText("safe")).toBeTruthy();
+    expect(screen.getByText("Weights (v/c/e/m/r)")).toBeTruthy();
+    expect(screen.getByText("0.30 / 0.35 / 0.10 / 0.10 / 0.15")).toBeTruthy();
     expect(screen.getByText("Offer Ranking")).toBeTruthy();
     expect(screen.getByText("Audit Trail")).toBeTruthy();
   });

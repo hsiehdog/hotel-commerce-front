@@ -380,6 +380,7 @@ export type ParsedOffersResponse = {
     resolvedRequest: unknown;
     profilePreAri: unknown;
     profileFinal: unknown;
+    scoring: unknown;
     selectionSummary: unknown;
     topCandidates: Array<Record<string, unknown>>;
   };
@@ -483,6 +484,7 @@ export function parseOffersResponse(payload: unknown): ParsedOffersResponse {
       resolvedRequest: debug.resolvedRequest ?? null,
       profilePreAri: debug.profilePreAri ?? null,
       profileFinal: debug.profileFinal ?? null,
+      scoring: debug.scoring ?? null,
       selectionSummary: debug.selectionSummary ?? null,
       topCandidates: firstArray(debug.topCandidates, debug.top_candidates).map((item) =>
         isRecord(item) ? item : {},

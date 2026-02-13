@@ -20,19 +20,16 @@ import {
 import {
   buildEffectiveConfigRows,
   buildFunnelStages,
-  buildNotUsedInputs,
   buildTimelineSteps,
-  buildTopReasonSummary,
-  buildWhyChips,
 } from "./dashboard/dashboard-logic";
 import { RequestForm } from "./dashboard/request-form";
 import { TimelineNav } from "./dashboard/timeline-nav";
 import { DecisionSummary } from "./dashboard/decision-summary";
+import { GuestProfile } from "./dashboard/guest-profile";
 import { CandidateAnalysis } from "./dashboard/candidate-analysis";
 import { DebugPanel } from "./dashboard/debug-panel";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { safeStringify, asRecord } from "./dashboard/utils";
+import { Card, CardContent } from "@/components/ui/card";
+import { asRecord } from "./dashboard/utils";
 
 export function OffersDemoDashboard() {
   const [draft, setDraft] = useState<OffersDraft>(getDefaultOffersDraft());
@@ -57,14 +54,18 @@ export function OffersDemoDashboard() {
   const deltaLine = buildDeltaLine(primaryOffer, secondaryOffer);
   const reasonGroups = groupReasonCodes(parsedResponse?.reasonCodes ?? []);
 
-  const resolvedRequest = useMemo(() => asRecord(parsedResponse?.debug.resolvedRequest), [parsedResponse]);
-  const profilePreAri = useMemo(() => asRecord(parsedResponse?.debug.profilePreAri), [parsedResponse]);
-  const profileFinal = useMemo(() => asRecord(parsedResponse?.debug.profileFinal), [parsedResponse]);
   const selectionSummary = useMemo(() => asRecord(parsedResponse?.debug.selectionSummary), [parsedResponse]);
   const funnelStages = useMemo(() => buildFunnelStages(parsedResponse), [parsedResponse]);
   const timelineSteps = useMemo(
     () => buildTimelineSteps(parsedResponse, requestPayload, funnelStages, selectionSummary),
     [parsedResponse, requestPayload, funnelStages, selectionSummary],
+  );
+
+  const profilePreAri = useMemo(() => asRecord(parsedResponse?.debug.profilePreAri), [parsedResponse]);
+  const profileFinal = useMemo(() => asRecord(parsedResponse?.debug.profileFinal), [parsedResponse]);
+  const scoringWeights = useMemo(
+    () => asRecord(asRecord(parsedResponse?.debug.scoring).weights),
+    [parsedResponse],
   );
 
   const allCandidates = parsedResponse?.debug.topCandidates ?? [];
@@ -75,11 +76,8 @@ export function OffersDemoDashboard() {
     }
 
     const ids = new Set(activeFunnel.candidateIds);
-    // @ts-ignore - dynamic candidate object
-    const filtered = allCandidates.filter((candidate) => {
-      // @ts-ignore - dynamic candidate object
+    const filtered = allCandidates.filter((candidate: Record<string, unknown>) => {
       const offerId = String(candidate.offerId ?? candidate.offer_id ?? "");
-      // @ts-ignore - dynamic candidate object
       const candidateId = String(candidate.candidateId ?? candidate.candidate_id ?? "");
       return ids.has(offerId) || ids.has(candidateId);
     });
@@ -87,26 +85,9 @@ export function OffersDemoDashboard() {
     return filtered.length > 0 ? filtered : allCandidates;
   }, [activeFunnel, allCandidates]);
 
-  const whyChips = useMemo(
-    () => buildWhyChips(profilePreAri, profileFinal, resolvedRequest, draft),
-    [draft, profileFinal, profilePreAri, resolvedRequest],
-  );
-  const topReasons = useMemo(
-    () => buildTopReasonSummary(parsedResponse, whyChips, selectionSummary, primaryOffer),
-    [parsedResponse, whyChips, selectionSummary, primaryOffer],
-  );
   const effectiveConfigRows = useMemo(
     () => buildEffectiveConfigRows(parsedResponse, requestPayload),
     [parsedResponse, requestPayload],
-  );
-  const notUsedInputs = useMemo(
-    () =>
-      buildNotUsedInputs(
-        requestPayload,
-        parsedResponse?.reasonCodes ?? [],
-        parsedResponse?.decisionTrace,
-      ),
-    [requestPayload, parsedResponse],
   );
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -209,54 +190,18 @@ export function OffersDemoDashboard() {
           <>
             <div id="selection" className="scroll-mt-24">
               <DecisionSummary
-                topReasons={topReasons}
                 primaryOffer={primaryOffer}
                 secondaryOffer={secondaryOffer}
                 deltaLine={deltaLine}
               />
             </div>
 
-            <div id="profile" className="grid gap-6 xl:grid-cols-2 scroll-mt-24">
-               <Card>
-                  <CardHeader>
-                     <CardTitle className="text-base">Guest Intent Profile</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                     <div className="flex flex-wrap gap-2">
-                        {whyChips.map((chip) => (
-                           <Badge key={`${chip.label}-${chip.reason}`} variant="secondary" title={chip.reason}>
-                              {chip.label}
-                           </Badge>
-                        ))}
-                        {whyChips.length === 0 && <span className="text-xs text-muted-foreground">No profile drivers returned.</span>}
-                     </div>
-                     <div className="rounded-md border p-3">
-                        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Ignored Inputs</p>
-                        {notUsedInputs.length > 0 ? (
-                           <div className="flex flex-wrap gap-2">
-                              {notUsedInputs.map((item) => (
-                                 <Badge key={item} variant="outline" className="text-[10px] text-muted-foreground">
-                                    {item}
-                                 </Badge>
-                              ))}
-                           </div>
-                        ) : (
-                           <p className="text-xs text-muted-foreground">All provided inputs contributed to this run.</p>
-                        )}
-                     </div>
-                  </CardContent>
-               </Card>
-
-               <Card>
-                  <CardHeader>
-                     <CardTitle className="text-base">Resolved Context</CardTitle>
-                  </CardHeader>
-                  <CardContent className="text-sm">
-                     <pre className="max-h-40 overflow-auto rounded-md border bg-muted/30 p-2 font-mono text-[10px]">
-                        {safeStringify(parsedResponse.debug.profileFinal)}
-                     </pre>
-                  </CardContent>
-               </Card>
+            <div id="profile" className="scroll-mt-24">
+               <GuestProfile 
+                  scoringWeights={scoringWeights}
+                  profileFinal={profileFinal}
+                  profilePreAri={profilePreAri}
+               />
             </div>
 
             <div id="funnel" className="scroll-mt-24">
