@@ -35,7 +35,7 @@ function buildParsedResponse(): ParsedOffersResponse {
 }
 
 describe("CandidateAnalysis", () => {
-  it("hides component columns in main ranking table and strips candidate prefix", () => {
+  it("hides component columns and does not render candidate ids in ranking rows", () => {
     render(
       <CandidateAnalysis
         displayedCandidates={[
@@ -68,7 +68,7 @@ describe("CandidateAnalysis", () => {
     expect(screen.queryByRole("columnheader", { name: "Risk" })).toBeNull();
 
     expect(screen.queryByText("candidate-alpha")).toBeNull();
-    expect(screen.getByText("alpha")).toBeTruthy();
+    expect(screen.queryByText("alpha")).toBeNull();
   });
 
   it("uses passed scoring weights in formula and shows missing-weight message without defaults", () => {

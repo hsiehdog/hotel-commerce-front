@@ -41,19 +41,17 @@ export function CandidateAnalysis({
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto rounded-md border">
-            <table className="w-full min-w-[720px] text-left text-sm">
+            <table className="w-full table-fixed text-left text-sm">
               <thead className="bg-muted/50">
                 <tr className="border-b text-xs text-muted-foreground">
-                  <th className="px-3 py-2 font-medium">Candidate</th>
-                  <th className="px-3 py-2 font-medium">Room / Plan / Archetype / Price</th>
-                  <th className="px-3 py-2 font-medium">Drivers</th>
-                  <th className="px-3 py-2 font-medium text-right">Final Score</th>
+                  <th className="w-[58%] px-3 py-2 font-medium">Room / Plan / Archetype / Price</th>
+                  <th className="w-[14%] px-3 py-2 font-medium">Score</th>
+                  <th className="w-[28%] px-3 py-2 font-medium">Drivers</th>
                 </tr>
               </thead>
               <tbody>
                 {displayedCandidates.map((candidate, index) => {
                   const rawCandidateId = toString(candidate.offerId ?? candidate.offer_id) || `candidate-${index + 1}`;
-                  const candidateId = rawCandidateId.replace(/^candidate-/i, "");
                   const rowId = `${rawCandidateId}-${index}`;
                   const scoring = getScoringModel(candidate, scoringWeights);
                   const selected = isSelectedCandidate(candidate, parsedResponse);
@@ -68,38 +66,38 @@ export function CandidateAnalysis({
                           selected && "bg-emerald-50 dark:bg-emerald-950/30"
                         )}
                       >
-                        <td className="px-3 py-2">
-                          <div className="flex items-center gap-2">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="ghost"
-                              className="h-6 w-6 p-0"
-                              onClick={() =>
-                                setExpandedCandidate((prev) => (prev === rowId ? null : rowId))
-                              }
-                            >
-                              {expandedCandidate === rowId ? "▼" : "▶"}
-                            </Button>
-                            <span className="font-mono text-xs">{candidateId}</span>
-                            {selected && <Badge className="h-5 px-1.5 text-[10px]">Sel</Badge>}
-                          </div>
-                        </td>
                         <td className="px-3 py-2 text-xs">
-                          <div className="flex flex-col">
-                            <span>
+                          <div className="flex items-start gap-3">
+                            <div className="flex items-center gap-2 shrink-0">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 w-6 p-0"
+                                onClick={() =>
+                                  setExpandedCandidate((prev) => (prev === rowId ? null : rowId))
+                                }
+                              >
+                                {expandedCandidate === rowId ? "▼" : "▶"}
+                              </Button>
+                              {selected && <Badge className="h-5 px-1.5 text-[10px]">Sel</Badge>}
+                            </div>
+                            <div className="min-w-0">
+                              <span className="block break-words">
                                 {toString(candidate.roomTypeName ?? candidate.roomType ?? candidate.room_type)}
-                            </span>
-                             <span className="text-muted-foreground">
+                              </span>
+                              <span className="block break-words text-muted-foreground">
                                 {toString(candidate.ratePlanName ?? candidate.ratePlan ?? candidate.rate_plan)}
-                             </span>
-                             <div className="flex gap-2 text-[10px] text-muted-foreground">
+                              </span>
+                              <div className="flex flex-wrap gap-2 text-[10px] text-muted-foreground">
                                 <span>{toString(candidate.archetype ?? candidate.offerType ?? candidate.type) || "-"}</span>
                                 <span>•</span>
                                 <span>{formatMoney(toNumber(candidate.total ?? candidate.totalPrice ?? candidate.price))}</span>
-                             </div>
+                              </div>
+                            </div>
                           </div>
                         </td>
+                        <td className="px-3 py-2 font-mono font-bold text-foreground">{scoreCell(scoring.finalScore)}</td>
                         <td className="px-3 py-2 text-xs">
                           {drivers.length > 0 ? (
                             <div className="flex flex-wrap gap-1">
@@ -107,11 +105,10 @@ export function CandidateAnalysis({
                             </div>
                           ) : "-"}
                         </td>
-                        <td className="px-3 py-2 text-right font-mono font-bold text-foreground">{scoreCell(scoring.finalScore)}</td>
                       </tr>
                       {expandedCandidate === rowId && (
                         <tr className="bg-muted/10">
-                          <td className="px-3 py-3" colSpan={4}>
+                          <td className="px-3 py-3" colSpan={3}>
                             <div className="rounded-md border bg-background p-4 shadow-sm">
                               <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Score Calculation</p>
                               <div className="mb-4 rounded bg-muted/30 p-2 font-mono text-xs">
@@ -130,7 +127,7 @@ export function CandidateAnalysis({
                 })}
                 {displayedCandidates.length === 0 && (
                   <tr>
-                    <td className="px-3 py-8 text-center text-muted-foreground" colSpan={4}>
+                    <td className="px-3 py-8 text-center text-muted-foreground" colSpan={3}>
                       No candidates found for this stage.
                     </td>
                   </tr>

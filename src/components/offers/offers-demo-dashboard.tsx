@@ -19,10 +19,8 @@ import {
 } from "@/lib/offers-demo";
 import {
   buildEffectiveConfigRows,
-  buildTimelineSteps,
 } from "./dashboard/dashboard-logic";
 import { RequestForm } from "./dashboard/request-form";
-import { TimelineNav } from "./dashboard/timeline-nav";
 import { DecisionSummary } from "./dashboard/decision-summary";
 import { GuestProfile } from "./dashboard/guest-profile";
 import { CandidateAnalysis } from "./dashboard/candidate-analysis";
@@ -51,12 +49,6 @@ export function OffersDemoDashboard() {
   const secondaryOffer = parsedResponse ? getSecondaryOffer(parsedResponse.offers) : null;
   const deltaLine = buildDeltaLine(primaryOffer, secondaryOffer);
   const reasonGroups = groupReasonCodes(parsedResponse?.reasonCodes ?? []);
-
-  const selectionSummary = useMemo(() => asRecord(parsedResponse?.debug.selectionSummary), [parsedResponse]);
-  const timelineSteps = useMemo(
-    () => buildTimelineSteps(parsedResponse, requestPayload, selectionSummary),
-    [parsedResponse, requestPayload, selectionSummary],
-  );
 
   const profilePreAri = useMemo(() => asRecord(parsedResponse?.debug.profilePreAri), [parsedResponse]);
   const profileFinal = useMemo(() => asRecord(parsedResponse?.debug.profileFinal), [parsedResponse]);
@@ -124,13 +116,6 @@ export function OffersDemoDashboard() {
     setApiError(null);
   }
 
-  function scrollToSection(id: string) {
-    const element = document.getElementById(id);
-    if (element) {
-      element.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  }
-
   return (
     <div className="grid gap-6 lg:grid-cols-[380px_1fr] xl:grid-cols-[420px_1fr]">
       {/* Sticky Left Column */}
@@ -156,10 +141,6 @@ export function OffersDemoDashboard() {
 
       {/* Scrollable Right Column */}
       <div className="min-w-0 space-y-6 pb-20">
-        <div className="sticky top-0 z-10 -mx-1 bg-background/95 px-1 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-           <TimelineNav steps={timelineSteps} onStepClick={scrollToSection} />
-        </div>
-
         {!parsedResponse ? (
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center justify-center py-12 text-center text-sm text-muted-foreground">

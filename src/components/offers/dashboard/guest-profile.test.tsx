@@ -40,7 +40,7 @@ describe("GuestProfile", () => {
 
     expect(screen.getByText(/Risk:/)).toBeTruthy();
     expect(screen.getByText(/0.13/)).toBeTruthy();
-    expect(screen.getByText(/captures downside signals and is subtracted from total score/i)).toBeTruthy();
+    expect(screen.getByText(/captures downside friction e.g. non-refundable, pay now, low inventory/i)).toBeTruthy();
 
     expect(
       screen.getByText(

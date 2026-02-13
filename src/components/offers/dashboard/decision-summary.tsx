@@ -69,11 +69,6 @@ function DecisionOfferCard({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 text-sm">
-        <div className="flex flex-wrap gap-2">
-          <Badge variant="outline">{offer.cancellationSummary}</Badge>
-          <Badge variant="secondary">{payment}</Badge>
-        </div>
-        
         <div className="rounded-md border bg-muted/20 p-3">
           <div className="flex items-baseline justify-between border-b border-dashed pb-2">
             <span className="text-xs font-medium text-muted-foreground">Total Price</span>
@@ -129,6 +124,11 @@ function DecisionOfferCard({
              </ul>
           </div>
         )}
+
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="outline">{offer.cancellationSummary}</Badge>
+          <Badge variant="secondary">{payment}</Badge>
+        </div>
       </CardContent>
     </Card>
   );
