@@ -8,6 +8,9 @@ import {
   firstNumber,
 } from "./utils";
 
+const WEIGHTS_SUMMARY_TEXT =
+  "Offer scores are calculated as a weighted blend of value, conversion, experience, and margin proxy, minus a separate risk penalty.";
+
 interface GuestProfileProps {
   scoringWeights: Record<string, unknown>;
   profileFinal: Record<string, unknown>;
@@ -48,9 +51,38 @@ export function GuestProfile({
 
         {hasWeights && (
           <div className="rounded-md border p-3 bg-background/50">
-            <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Weights (v/c/e/m/r)</p>
-            <p className="font-mono text-sm">
-              {`${(firstNumber(weights.value) ?? 0).toFixed(2)} / ${(firstNumber(weights.conversion) ?? 0).toFixed(2)} / ${(firstNumber(weights.experience) ?? 0).toFixed(2)} / ${(firstNumber(weights.margin) ?? 0).toFixed(2)} / ${(firstNumber(weights.risk) ?? 0).toFixed(2)}`}
+            <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+              Weights
+            </p>
+            <div className="space-y-1 text-sm">
+              <p>
+                <span className="font-semibold">Value:</span>{" "}
+                <span className="font-mono">{(firstNumber(weights.value) ?? 0).toFixed(2)}</span>{" "}
+                <span className="text-muted-foreground">(rewards lower-priced options)</span>
+              </p>
+              <p>
+                <span className="font-semibold">Conversion:</span>{" "}
+                <span className="font-mono">{(firstNumber(weights.conversion) ?? 0).toFixed(2)}</span>{" "}
+                <span className="text-muted-foreground">(rewards easier booking terms)</span>
+              </p>
+              <p>
+                <span className="font-semibold">Experience:</span>{" "}
+                <span className="font-mono">{(firstNumber(weights.experience) ?? 0).toFixed(2)}</span>{" "}
+                <span className="text-muted-foreground">(rewards higher-tier room quality)</span>
+              </p>
+              <p>
+                <span className="font-semibold">Margin:</span>{" "}
+                <span className="font-mono">{(firstNumber(weights.margin) ?? 0).toFixed(2)}</span>{" "}
+                <span className="text-muted-foreground">(rewards higher-priced options from a revenue perspective)</span>
+              </p>
+              <p>
+                <span className="font-semibold">Risk:</span>{" "}
+                <span className="font-mono">{(firstNumber(weights.risk) ?? 0).toFixed(2)}</span>{" "}
+                <span className="text-muted-foreground">(captures downside signals and is subtracted from total score)</span>
+              </p>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              {WEIGHTS_SUMMARY_TEXT}
             </p>
           </div>
         )}

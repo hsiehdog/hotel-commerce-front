@@ -210,10 +210,10 @@ export function OffersDemoDashboard() {
                 selectedFunnelStage={selectedFunnelStage}
                 setSelectedFunnelStage={setSelectedFunnelStage}
                 displayedCandidates={displayedCandidates}
+                scoringWeights={scoringWeights}
                 expandedCandidate={expandedCandidate}
                 setExpandedCandidate={setExpandedCandidate}
                 parsedResponse={parsedResponse}
-                selectionSummary={selectionSummary}
               />
             </div>
 

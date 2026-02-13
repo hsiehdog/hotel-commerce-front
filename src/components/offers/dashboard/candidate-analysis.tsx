@@ -31,10 +31,10 @@ interface CandidateAnalysisProps {
   selectedFunnelStage: string;
   setSelectedFunnelStage: Dispatch<SetStateAction<string>>;
   displayedCandidates: Array<Record<string, unknown>>;
+  scoringWeights: Record<string, unknown>;
   expandedCandidate: string | null;
   setExpandedCandidate: Dispatch<SetStateAction<string | null>>;
   parsedResponse: ParsedOffersResponse;
-  selectionSummary: Record<string, unknown>;
 }
 
 export function CandidateAnalysis({
@@ -42,10 +42,10 @@ export function CandidateAnalysis({
   selectedFunnelStage,
   setSelectedFunnelStage,
   displayedCandidates,
+  scoringWeights,
   expandedCandidate,
   setExpandedCandidate,
   parsedResponse,
-  selectionSummary,
 }: CandidateAnalysisProps) {
   const activeFunnel = funnelStages.find((stage) => stage.id === selectedFunnelStage);
 
@@ -92,25 +92,21 @@ export function CandidateAnalysis({
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto rounded-md border">
-            <table className="w-full min-w-[980px] text-left text-sm">
+            <table className="w-full min-w-[720px] text-left text-sm">
               <thead className="bg-muted/50">
                 <tr className="border-b text-xs text-muted-foreground">
                   <th className="px-3 py-2 font-medium">Candidate</th>
                   <th className="px-3 py-2 font-medium">Room / Plan / Archetype / Price</th>
                   <th className="px-3 py-2 font-medium">Drivers</th>
-                  <th className="px-3 py-2 font-medium">Value</th>
-                  <th className="px-3 py-2 font-medium">Conv</th>
-                  <th className="px-3 py-2 font-medium">Exp</th>
-                  <th className="px-3 py-2 font-medium">Margin</th>
-                  <th className="px-3 py-2 font-medium">Risk</th>
                   <th className="px-3 py-2 font-medium text-right">Final Score</th>
                 </tr>
               </thead>
               <tbody>
                 {displayedCandidates.map((candidate, index) => {
-                  const candidateId = toString(candidate.offerId ?? candidate.offer_id) || `candidate-${index + 1}`;
-                  const rowId = `${candidateId}-${index}`;
-                  const scoring = getScoringModel(candidate, selectionSummary);
+                  const rawCandidateId = toString(candidate.offerId ?? candidate.offer_id) || `candidate-${index + 1}`;
+                  const candidateId = rawCandidateId.replace(/^candidate-/i, "");
+                  const rowId = `${rawCandidateId}-${index}`;
+                  const scoring = getScoringModel(candidate, scoringWeights);
                   const selected = isSelectedCandidate(candidate, parsedResponse);
                   const matchedOffer = findOfferForCandidate(candidate, parsedResponse.offers);
                   const drivers = buildCandidateDrivers(candidate, matchedOffer);
@@ -162,16 +158,11 @@ export function CandidateAnalysis({
                             </div>
                           ) : "-"}
                         </td>
-                        <td className="px-3 py-2 font-mono text-xs">{scoreCell(scoring.value)}</td>
-                        <td className="px-3 py-2 font-mono text-xs">{scoreCell(scoring.conversion)}</td>
-                        <td className="px-3 py-2 font-mono text-xs">{scoreCell(scoring.experience)}</td>
-                        <td className="px-3 py-2 font-mono text-xs">{scoreCell(scoring.margin)}</td>
-                        <td className="px-3 py-2 font-mono text-xs">{scoreCell(scoring.risk)}</td>
                         <td className="px-3 py-2 text-right font-mono font-bold text-foreground">{scoreCell(scoring.finalScore)}</td>
                       </tr>
                       {expandedCandidate === rowId && (
                         <tr className="bg-muted/10">
-                          <td className="px-3 py-3" colSpan={9}>
+                          <td className="px-3 py-3" colSpan={4}>
                             <div className="rounded-md border bg-background p-4 shadow-sm">
                               <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Score Calculation</p>
                               <div className="mb-4 rounded bg-muted/30 p-2 font-mono text-xs">
@@ -190,7 +181,7 @@ export function CandidateAnalysis({
                 })}
                 {displayedCandidates.length === 0 && (
                   <tr>
-                    <td className="px-3 py-8 text-center text-muted-foreground" colSpan={9}>
+                    <td className="px-3 py-8 text-center text-muted-foreground" colSpan={4}>
                       No candidates found for this stage.
                     </td>
                   </tr>
@@ -206,9 +197,9 @@ export function CandidateAnalysis({
 
 // --- Helpers ---
 
-function getScoringModel(candidate: Record<string, unknown>, selectionSummary: Record<string, unknown>) {
+function getScoringModel(candidate: Record<string, unknown>, scoringWeights: Record<string, unknown>) {
   const components = asRecord(candidate.scoreComponents ?? candidate.scoringComponents ?? candidate.components);
-  const weights = asRecord(candidate.weights ?? selectionSummary.weights ?? selectionSummary.scoreWeights ?? selectionSummary.score_weights);
+  const weights = asRecord(scoringWeights);
 
   const value = firstNumber(components.value, components.valueScore, components.value_score) ?? 0;
   const conversion = firstNumber(components.conversion, components.conversionScore, components.conversion_score) ?? 0;
@@ -230,17 +221,34 @@ function getScoringModel(candidate: Record<string, unknown>, selectionSummary: R
       components.risk_score,
     ) ?? 0;
 
-  const valueW = firstNumber(weights.value, weights.valueWeight, weights.value_weight) ?? 0.3;
-  const conversionW = firstNumber(weights.conversion, weights.conversionWeight, weights.conversion_weight) ?? 0.35;
-  const experienceW = firstNumber(weights.experience, weights.experienceWeight, weights.experience_weight) ?? 0.1;
-  const marginW = firstNumber(weights.margin, weights.marginWeight, weights.margin_weight) ?? 0.1;
-  const riskW = firstNumber(weights.risk, weights.riskWeight, weights.risk_weight) ?? 0.15;
+  const valueW = firstNumber(weights.value, weights.valueWeight, weights.value_weight);
+  const conversionW = firstNumber(weights.conversion, weights.conversionWeight, weights.conversion_weight);
+  const experienceW = firstNumber(weights.experience, weights.experienceWeight, weights.experience_weight);
+  const marginW = firstNumber(weights.margin, weights.marginWeight, weights.margin_weight);
+  const riskW = firstNumber(weights.risk, weights.riskWeight, weights.risk_weight);
 
   const directFinal = firstNumber(candidate.score, candidate.totalScore, candidate.scoreTotal);
+  if (
+    valueW === null ||
+    conversionW === null ||
+    experienceW === null ||
+    marginW === null ||
+    riskW === null
+  ) {
+    return {
+      value,
+      conversion,
+      experience,
+      margin,
+      risk,
+      finalScore: directFinal ?? null,
+      formula: "Weights missing in debug.scoring.weights",
+    };
+  }
+
   const computed = value * valueW + conversion * conversionW + experience * experienceW + margin * marginW - risk * riskW;
   const finalScore = directFinal ?? Number(computed.toFixed(2));
-
-  const formula = `${finalScore.toFixed(2)} = ${value.toFixed(2)}*${valueW.toFixed(2)} + ${conversion.toFixed(2)}*${conversionW.toFixed(2)} + ${experience.toFixed(2)}*${experienceW.toFixed(2)} + ${margin.toFixed(2)}*${marginW.toFixed(2)} - ${risk.toFixed(2)}*${riskW.toFixed(2)}`;
+  const formula = `${scoreCell(finalScore)} = ${value.toFixed(2)}*${valueW.toFixed(2)} + ${conversion.toFixed(2)}*${conversionW.toFixed(2)} + ${experience.toFixed(2)}*${experienceW.toFixed(2)} + ${margin.toFixed(2)}*${marginW.toFixed(2)} - ${risk.toFixed(2)}*${riskW.toFixed(2)}`;
 
   return {
     value,

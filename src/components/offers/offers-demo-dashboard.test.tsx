@@ -120,8 +120,11 @@ describe("OffersDemoDashboard", () => {
     expect(screen.getByText("User Profile")).toBeTruthy();
     expect(screen.getByText("family")).toBeTruthy();
     expect(screen.getByText("safe")).toBeTruthy();
-    expect(screen.getByText("Weights (v/c/e/m/r)")).toBeTruthy();
-    expect(screen.getByText("0.30 / 0.35 / 0.10 / 0.10 / 0.15")).toBeTruthy();
+    expect(screen.getByText("Weights")).toBeTruthy();
+    expect(screen.getByText(/Value:/)).toBeTruthy();
+    expect(screen.getByText(/0.30/)).toBeTruthy();
+    expect(screen.getByText(/Conversion:/)).toBeTruthy();
+    expect(screen.getByText(/0.35/)).toBeTruthy();
     expect(screen.getByText("Offer Ranking")).toBeTruthy();
     expect(screen.getByText("Audit Trail")).toBeTruthy();
   });
