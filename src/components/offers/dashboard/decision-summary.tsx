@@ -114,6 +114,20 @@ function DecisionOfferCard({
           </div>
         )}
         
+        <div>
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Payment
+          </p>
+          <p className="text-xs text-foreground">{payment}</p>
+        </div>
+
+        <div>
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Cancellation Policy
+          </p>
+          <p className="text-xs text-foreground">{offer.cancellationSummary}</p>
+        </div>
+
         {disclosures.length > 0 && (
           <div>
              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Disclosures</p>
@@ -124,11 +138,6 @@ function DecisionOfferCard({
              </ul>
           </div>
         )}
-
-        <div className="flex flex-wrap gap-2">
-          <Badge variant="outline">{offer.cancellationSummary}</Badge>
-          <Badge variant="secondary">{payment}</Badge>
-        </div>
       </CardContent>
     </Card>
   );
