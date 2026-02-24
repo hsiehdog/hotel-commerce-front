@@ -145,7 +145,7 @@ export function OffersDemoDashboard() {
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center justify-center py-12 text-center text-sm text-muted-foreground">
               <p className="mb-2 text-lg font-semibold text-foreground">Ready to run</p>
-              <p>Configure the guest request on the left and click "Run Decision".</p>
+              <p>Configure the guest request on the left and click &quot;Run Decision&quot;.</p>
             </CardContent>
           </Card>
         ) : (
