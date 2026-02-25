@@ -74,6 +74,47 @@ Capture these screens for stakeholder walkthroughs:
 4. Debug Deep Dive candidate table with selected-row highlight.
 5. Raw JSON tab with request/response and copy bundle action.
 
+## Offer logs dashboard (`/demo/offers/logs`)
+
+Use this route to inspect historical offer decisions in a table-first ops log.
+
+1. Start frontend with `pnpm dev`.
+2. Ensure backend exposes:
+   - `GET /properties` (`activeOnly=true|false`, default true)
+   - `GET /offers/logs`
+   - `GET /offers/logs/:decisionId`
+3. Set `NEXT_PUBLIC_API_BASE_URL` so frontend can call those endpoints.
+4. Open `http://localhost:3000/demo/offers/logs`.
+5. Select a property from the dropdown (auto-selects first active property when available).
+6. Select a time preset (`24h`, `7d`, `30d`).
+7. Use the log table for operational scan with columns:
+   - `recordedAt`
+   - `channel`
+   - `status`
+   - `served/http`
+   - `created outbox state`
+   - `offersCount`
+   - `primary offer summary` (`type + room + rate`)
+   - `primary total price`
+   - `refundability`
+   - `top 2–3 reason codes`
+   - `latency`
+8. Click a row to open the detail drawer:
+   - summary strip
+   - presented offers table
+   - why section (`global + per-offer`)
+   - top candidates table (max 10) if available
+   - timeline (collapsed by default, auto-expanded for bad/error cases)
+   - raw JSON (always collapsed)
+
+### Backend response notes
+
+- `GET /offers/logs` should enforce max 30-day range and support cursor pagination.
+- List rows should include computed fields like `served`, `servedSuccess`, `latencyMs`, and `decisionAgeMs`.
+- List rows should include primary-offer summary fields used by the ops table (`primaryOfferType`, room/rate display fields, total/currency, refundability).
+- `GET /offers/logs/:decisionId` should return normalized created-event sections plus integrity flags and normalization warnings.
+- `includeRawPayloads` and optional payload cap handling are supported for detail retrieval.
+
 ## Available scripts
 
 | Script | Description |

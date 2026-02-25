@@ -32,6 +32,202 @@ export type ChatMessage = {
   isOptimistic?: boolean;
 };
 
+export type OffersLogDecisionStatus = "OK" | "NO_OFFERS" | "FALLBACK_ONLY" | "ERROR";
+export type AuditOutboxState = "PENDING" | "ENQUEUED" | "PROCESSED" | "DLQ";
+
+export type PropertyListItem = {
+  propertyId: string;
+  name: string;
+};
+
+export type FetchPropertiesOptions = {
+  activeOnly?: boolean;
+};
+
+export type OffersLogsListFilters = {
+  propertyId: string;
+  from: string;
+  to: string;
+  channel?: string;
+  decisionStatus?: OffersLogDecisionStatus;
+  requestId?: string;
+  decisionId?: string;
+  truncated?: boolean;
+  errors?: boolean;
+  fallbackOnly?: boolean;
+  slow?: boolean;
+  dlq?: boolean;
+  limit?: number;
+  cursor?: string;
+};
+
+export type OffersLogsListRow = {
+  decisionId: string;
+  requestId: string;
+  propertyId: string;
+  tenantId?: string;
+  eventRecordedAt: string;
+  channel: string;
+  decisionStatus: OffersLogDecisionStatus;
+  offersCount: number;
+  truncated: boolean;
+  primaryOfferType?: string | null;
+  primaryOfferRoomTypeName?: string | null;
+  primaryOfferRatePlanName?: string | null;
+  primaryOfferTotalPrice?: number | null;
+  primaryOfferCurrency?: string | null;
+  primaryOfferRefundability?: string | boolean | null;
+  fallbackActionType?: string | null;
+  httpStatus?: number | null;
+  servedAttemptedAt?: string | null;
+  servedFinishedAt?: string | null;
+  served: boolean;
+  servedSuccess: boolean;
+  createdEventId?: string | null;
+  createdEventRecordedAt?: string | null;
+  createdEventOutboxState?: AuditOutboxState | null;
+  createdEventOutboxAttempts?: number | null;
+  createdEventLastErrorSafeMessage?: string | null;
+  reasonCodes: string[];
+  reasonCodesCount: number;
+  reasonCodesTruncated: boolean;
+  latencyMs: number;
+  decisionAgeMs: number;
+};
+
+export type OffersLogsListResponse = {
+  serverNow: string;
+  pageInfo: {
+    hasMore: boolean;
+    nextCursor?: string;
+    limit: number;
+  };
+  rows: OffersLogsListRow[];
+};
+
+export type OffersLogEventOutbox = {
+  state: AuditOutboxState;
+  attempts: number;
+  lastErrorCode?: string | null;
+  lastErrorSafeMessage?: string | null;
+  eventEnqueuedAt?: string | null;
+  eventProcessedAt?: string | null;
+  processingLatencyMs?: number | null;
+};
+
+export type OffersLogDetailEvent = {
+  eventId: string;
+  eventType: string;
+  eventKey: string;
+  schemaMajor: number;
+  schemaMinor: number;
+  engineVersion: string;
+  configVersion: number;
+  truncated: boolean;
+  truncationFields: string[];
+  errorCode?: string | null;
+  errorSafeMessage?: string | null;
+  eventOccurredAt?: string | null;
+  eventRecordedAt: string;
+  outbox?: OffersLogEventOutbox | null;
+};
+
+export type OffersLogPresentedOffer = {
+  offerId: string;
+  roomTypeId?: string | null;
+  ratePlanId?: string | null;
+  roomTypeName?: string | null;
+  ratePlanName?: string | null;
+  type?: string | null;
+  recommended?: boolean | null;
+  totalPrice?: number | null;
+  currency?: string | null;
+  basis?: string | null;
+  policySummary?: string | null;
+  cancellationSummary?: string | null;
+  paymentTiming?: string | null;
+  enhancements?: unknown;
+  disclosures?: unknown;
+};
+
+export type OffersLogTopCandidate = {
+  offerId?: string | null;
+  roomTypeId?: string | null;
+  ratePlanId?: string | null;
+  score?: number | null;
+  rank?: number | null;
+  totalPrice?: number | null;
+  currency?: string | null;
+  basis?: string | null;
+  exclusionReason?: string | null;
+};
+
+export type OffersLogsDetailResponse = {
+  decision: {
+    decisionId: string;
+    tenantId: string;
+    propertyId: string;
+    requestId: string;
+    channel: string;
+    checkIn?: string | null;
+    checkOut?: string | null;
+    nights?: number | null;
+    adults?: number | null;
+    children?: number | null;
+    rooms?: number | null;
+    currency?: string | null;
+    priceBasisUsed?: string | null;
+    primaryOfferType?: string | null;
+    fallbackActionType?: string | null;
+    offersCount: number;
+    decisionStatus: OffersLogDecisionStatus;
+    reasonCodes: string[];
+    truncated: boolean;
+    httpStatus?: number | null;
+    servedAttemptedAt?: string | null;
+    servedFinishedAt?: string | null;
+    eventRecordedAt: string;
+    served: boolean;
+    servedSuccess: boolean;
+    latencyMs: number;
+  };
+  createdEventCount: number;
+  selectedCreatedEventId?: string | null;
+  selectedCreatedEventRecordedAt?: string | null;
+  integrityFlags: {
+    multipleCreatedEvents?: boolean;
+    truncatedPayload?: boolean;
+    missingDebugPayload?: boolean;
+    missingCreatedEvent?: boolean;
+  };
+  normalizationWarnings?: string[];
+  events: OffersLogDetailEvent[];
+  normalized: {
+    reasonDetailsVersion: number;
+    globalReasonCodes: string[];
+    selectionSummary?: string | null;
+    reasonDetails?: unknown;
+    reasonsByOfferId?: Record<string, string[]> | null;
+    presentedOffers: OffersLogPresentedOffer[];
+    topCandidates?: OffersLogTopCandidate[] | null;
+    guardrails?: {
+      rules?: Array<{
+        name: string;
+        passed: boolean;
+        observed?: number | string;
+        threshold?: number | string;
+      }>;
+    } | null;
+    resolvedRequest?: unknown;
+    engineVersion?: string | null;
+    configVersion?: number | null;
+    artifactVersionsJson?: unknown;
+    rawCorePayload?: unknown;
+    rawDebugPayload?: unknown;
+    payloadTruncatedForResponse?: boolean;
+  };
+};
+
 type AIChatResponse = {
   id?: string;
   role?: "user" | "assistant" | "system";
@@ -144,6 +340,25 @@ const mockData = {
   ] satisfies ChatMessage[],
 };
 
+const mockOffersData = {
+  properties: [
+    { propertyId: "demo_hotel_sf", name: "Demo Hotel San Francisco" },
+    { propertyId: "demo_hotel_nyc", name: "Demo Hotel New York" },
+  ] satisfies PropertyListItem[],
+};
+
+function buildQueryString(params: Record<string, string | number | boolean | undefined>) {
+  const searchParams = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === "") {
+      continue;
+    }
+    searchParams.set(key, String(value));
+  }
+  const serialized = searchParams.toString();
+  return serialized ? `?${serialized}` : "";
+}
+
 export async function fetchUsageMetrics(): Promise<UsageMetric[]> {
   if (isMock) {
     await delay(300);
@@ -207,6 +422,76 @@ export async function sendChatMessage(message: string): Promise<ChatMessage> {
   );
 
   return mapToChatMessage(response.data);
+}
+
+export async function fetchProperties(
+  options: FetchPropertiesOptions = {},
+): Promise<PropertyListItem[]> {
+  if (isMock) {
+    await delay(180);
+    return mockOffersData.properties;
+  }
+
+  const query = buildQueryString({
+    activeOnly: options.activeOnly ?? true,
+  });
+  const response = await request<{ rows?: PropertyListItem[] }>(`/properties${query}`, "GET");
+  return response.rows ?? [];
+}
+
+export async function fetchOffersLogs(
+  filters: OffersLogsListFilters,
+): Promise<OffersLogsListResponse> {
+  const query = buildQueryString({
+    propertyId: filters.propertyId,
+    from: filters.from,
+    to: filters.to,
+    channel: filters.channel,
+    decisionStatus: filters.decisionStatus,
+    requestId: filters.requestId,
+    decisionId: filters.decisionId,
+    truncated: filters.truncated,
+    errors: filters.errors,
+    fallbackOnly: filters.fallbackOnly,
+    slow: filters.slow,
+    dlq: filters.dlq,
+    limit: filters.limit,
+    cursor: filters.cursor,
+  });
+
+  if (isMock) {
+    await delay(220);
+    return {
+      serverNow: new Date().toISOString(),
+      pageInfo: {
+        hasMore: false,
+        limit: filters.limit ?? 25,
+      },
+      rows: [],
+    };
+  }
+
+  return request<OffersLogsListResponse>(`/offers/logs${query}`, "GET");
+}
+
+export async function fetchOffersLogDetail(
+  decisionId: string,
+  options: { includeRawPayloads?: boolean; payloadCapKb?: number } = {},
+): Promise<OffersLogsDetailResponse> {
+  const query = buildQueryString({
+    includeRawPayloads: options.includeRawPayloads,
+    payloadCapKb: options.payloadCapKb,
+  });
+
+  if (isMock) {
+    await delay(200);
+    throw new Error("Offer logs detail is unavailable in mock mode.");
+  }
+
+  return request<OffersLogsDetailResponse>(
+    `/offers/logs/${encodeURIComponent(decisionId)}${query}`,
+    "GET",
+  );
 }
 
 export async function updateUserProfile(
