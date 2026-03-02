@@ -66,7 +66,7 @@ describe("OffersLogsDashboard", () => {
     ]);
   });
 
-  it("auto-selects first property and loads decision rows", async () => {
+  it("defaults to demo_property and loads decision rows", async () => {
     mockedFetchOffersLogs.mockResolvedValue({
       serverNow: new Date().toISOString(),
       pageInfo: {
@@ -77,7 +77,7 @@ describe("OffersLogsDashboard", () => {
         {
           decisionId: "decision-1",
           requestId: "request-1",
-          propertyId: "demo_hotel_sf",
+          propertyId: "demo_property",
           tenantId: "tenant-1",
           eventRecordedAt: new Date().toISOString(),
           channel: "web",
@@ -108,9 +108,32 @@ describe("OffersLogsDashboard", () => {
 
     expect(mockedFetchOffersLogs).toHaveBeenCalledWith(
       expect.objectContaining({
-        propertyId: "demo_hotel_sf",
+        propertyId: "demo_property",
       }),
     );
+  });
+
+  it("shows human-readable property labels with demo_property first", async () => {
+    mockedFetchOffersLogs.mockResolvedValue({
+      serverNow: new Date().toISOString(),
+      pageInfo: {
+        hasMore: false,
+        limit: 25,
+      },
+      rows: [],
+    });
+
+    renderDashboard();
+
+    const select = await screen.findByLabelText("Property");
+    await waitFor(() => {
+      const optionValues = Array.from((select as HTMLSelectElement).options).map((option) => option.value);
+      const optionLabels = Array.from((select as HTMLSelectElement).options).map((option) => option.textContent);
+      expect(optionValues[0]).toBe("demo_property");
+      expect(optionValues.slice(1)).toEqual(["demo_hotel_sf", "demo_hotel_nyc"]);
+      expect(optionLabels[0]).toBe("Demo Property");
+      expect(optionLabels.slice(1)).toEqual(["Demo Hotel San Francisco", "Demo Hotel New York"]);
+    });
   });
 
   it("does not emit hydration mismatch when time changes between server and client", async () => {

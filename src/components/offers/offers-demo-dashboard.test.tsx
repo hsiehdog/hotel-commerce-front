@@ -28,6 +28,10 @@ describe("OffersDemoDashboard", () => {
 
     render(<OffersDemoDashboard />);
 
+    const propertySelect = screen.getByLabelText("Property") as HTMLSelectElement;
+    const propertyLabels = Array.from(propertySelect.options).map((option) => option.textContent);
+    expect(propertyLabels).toEqual(["Demo Property", "Inn At Mount Shasta"]);
+
     expect(screen.queryByLabelText("Demo scenario")).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "Adv" }));

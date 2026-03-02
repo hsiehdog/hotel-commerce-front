@@ -20,6 +20,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 type DatePreset = "24h" | "7d" | "30d";
+const DEFAULT_PROPERTY_ID = "demo_property";
 
 const PRESET_OPTIONS: Array<{ id: DatePreset; label: string }> = [
   { id: "24h", label: "24h" },
@@ -158,12 +159,22 @@ function getRefundabilityLabel(refundability?: string | boolean | null): string 
   return "-";
 }
 
+function formatPropertyLabel(label: string): string {
+  return label
+    .replace(/[_-]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
 export function OffersLogsDashboard() {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [propertyId, setPropertyId] = useState(() => searchParams.get("propertyId") ?? "");
+  const [propertyId, setPropertyId] = useState(() => searchParams.get("propertyId") ?? DEFAULT_PROPERTY_ID);
   const [preset, setPreset] = useState<DatePreset>(() => resolvePreset(searchParams.get("preset")));
   const [selectedDecisionId, setSelectedDecisionId] = useState(
     () => searchParams.get("selectedDecisionId") ?? "",
@@ -181,12 +192,11 @@ export function OffersLogsDashboard() {
     queryFn: () => fetchProperties({ activeOnly: true }),
   });
 
-  useEffect(() => {
-    if (propertyId || !propertiesQuery.data?.length) {
-      return;
-    }
-    setPropertyId(propertiesQuery.data[0].propertyId);
-  }, [propertyId, propertiesQuery.data]);
+  const propertyOptions = useMemo(() => {
+    const apiProperties = propertiesQuery.data ?? [];
+    const filtered = apiProperties.filter((property) => property.propertyId !== DEFAULT_PROPERTY_ID);
+    return [{ propertyId: DEFAULT_PROPERTY_ID, name: DEFAULT_PROPERTY_ID }, ...filtered];
+  }, [propertiesQuery.data]);
 
   useEffect(() => {
     setWindow(buildWindowFromPreset(preset));
@@ -281,10 +291,9 @@ export function OffersLogsDashboard() {
                 onChange={(event) => setPropertyId(event.target.value)}
                 className="h-9 min-w-[260px] rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
               >
-                <option value="">Select a property</option>
-                {(propertiesQuery.data ?? []).map((property) => (
+                {propertyOptions.map((property) => (
                   <option key={property.propertyId} value={property.propertyId}>
-                    {property.name}
+                    {formatPropertyLabel(property.name || property.propertyId)}
                   </option>
                 ))}
               </select>

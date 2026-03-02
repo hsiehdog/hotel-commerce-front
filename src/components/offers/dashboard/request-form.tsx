@@ -145,8 +145,8 @@ export function RequestForm({
                   }
                   className="border-input focus-visible:border-ring focus-visible:ring-ring/50 h-9 w-full rounded-md border bg-transparent px-3 text-sm outline-none focus-visible:ring-[3px]"
                 >
-                  <option value="demo_property">demo_property</option>
-                  <option value="inn_at_mount_shasta">inn_at_mount_shasta</option>
+                  <option value="demo_property">Demo Property</option>
+                  <option value="inn_at_mount_shasta">Inn At Mount Shasta</option>
                 </select>
               </div>
 
