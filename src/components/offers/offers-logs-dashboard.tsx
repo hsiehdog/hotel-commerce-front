@@ -19,31 +19,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
-type DatePreset = "24h" | "7d" | "30d";
 const DEFAULT_PROPERTY_ID = "demo_property";
-
-const PRESET_OPTIONS: Array<{ id: DatePreset; label: string }> = [
-  { id: "24h", label: "24h" },
-  { id: "7d", label: "7d" },
-  { id: "30d", label: "30d" },
-];
-
-function resolvePreset(value: string | null): DatePreset {
-  if (value === "7d" || value === "30d") {
-    return value;
-  }
-  return "24h";
-}
-
-function buildWindowFromPreset(preset: DatePreset): { fromIso: string; toIso: string } {
-  const to = new Date();
-  const hours = preset === "24h" ? 24 : preset === "7d" ? 24 * 7 : 24 * 30;
-  const from = new Date(to.getTime() - hours * 60 * 60 * 1000);
-  return {
-    fromIso: from.toISOString(),
-    toIso: to.toISOString(),
-  };
-}
+const ALL_TIME_FROM_ISO = "1970-01-01T00:00:00.000Z";
+const ALL_TIME_TO_ISO = "9999-12-31T23:59:59.999Z";
 
 function formatDateTime(value?: string | null): string {
   if (!value) {
@@ -175,15 +153,10 @@ export function OffersLogsDashboard() {
   const searchParams = useSearchParams();
 
   const [propertyId, setPropertyId] = useState(() => searchParams.get("propertyId") ?? DEFAULT_PROPERTY_ID);
-  const [preset, setPreset] = useState<DatePreset>(() => resolvePreset(searchParams.get("preset")));
   const [selectedDecisionId, setSelectedDecisionId] = useState(
     () => searchParams.get("selectedDecisionId") ?? "",
   );
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [window, setWindow] = useState<{ fromIso: string; toIso: string }>({
-    fromIso: "",
-    toIso: "",
-  });
 
   const hasMountedRef = useRef(false);
 
@@ -198,21 +171,17 @@ export function OffersLogsDashboard() {
     return [{ propertyId: DEFAULT_PROPERTY_ID, name: DEFAULT_PROPERTY_ID }, ...filtered];
   }, [propertiesQuery.data]);
 
-  useEffect(() => {
-    setWindow(buildWindowFromPreset(preset));
-  }, [preset]);
-
   const listQuery = useInfiniteQuery({
-    queryKey: ["offer-logs", propertyId, window.fromIso, window.toIso],
+    queryKey: ["offer-logs", propertyId],
     queryFn: ({ pageParam }) =>
       fetchOffersLogs({
         propertyId,
-        from: window.fromIso,
-        to: window.toIso,
+        from: ALL_TIME_FROM_ISO,
+        to: ALL_TIME_TO_ISO,
         cursor: pageParam as string | undefined,
         limit: 25,
       }),
-    enabled: Boolean(propertyId && window.fromIso && window.toIso),
+    enabled: Boolean(propertyId),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => (lastPage.pageInfo.hasMore ? lastPage.pageInfo.nextCursor : undefined),
   });
@@ -236,14 +205,13 @@ export function OffersLogsDashboard() {
 
     setSelectedDecisionId("");
     setIsDrawerOpen(false);
-  }, [propertyId, preset]);
+  }, [propertyId]);
 
   useEffect(() => {
     const params = new URLSearchParams();
     if (propertyId) {
       params.set("propertyId", propertyId);
     }
-    params.set("preset", preset);
     if (selectedDecisionId) {
       params.set("selectedDecisionId", selectedDecisionId);
     }
@@ -253,11 +221,7 @@ export function OffersLogsDashboard() {
     if (next !== current) {
       router.replace(`${pathname}?${next}`, { scroll: false });
     }
-  }, [pathname, preset, propertyId, router, searchParams, selectedDecisionId]);
-
-  function handlePresetChange(nextPreset: DatePreset) {
-    setPreset(nextPreset);
-  }
+  }, [pathname, propertyId, router, searchParams, selectedDecisionId]);
 
   function openDetail(decisionId: string) {
     setSelectedDecisionId(decisionId);
@@ -283,13 +247,13 @@ export function OffersLogsDashboard() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-end gap-4">
-            <div className="space-y-2">
+            <div className="space-y-1 pr-2">
               <label htmlFor="propertyId" className="text-sm font-medium">Property</label>
               <select
                 id="propertyId"
                 value={propertyId}
                 onChange={(event) => setPropertyId(event.target.value)}
-                className="h-9 min-w-[260px] rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
+                className="block h-9 min-w-[260px] rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
               >
                 {propertyOptions.map((property) => (
                   <option key={property.propertyId} value={property.propertyId}>
@@ -298,22 +262,6 @@ export function OffersLogsDashboard() {
                 ))}
               </select>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {PRESET_OPTIONS.map((option) => (
-                <Button
-                  key={option.id}
-                  type="button"
-                  size="sm"
-                  variant={preset === option.id ? "default" : "outline"}
-                  onClick={() => handlePresetChange(option.id)}
-                >
-                  {option.label}
-                </Button>
-              ))}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Window: {formatDateTime(window.fromIso)} to {formatDateTime(window.toIso)}
-            </p>
           </div>
         </CardContent>
       </Card>

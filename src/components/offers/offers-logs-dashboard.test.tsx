@@ -109,6 +109,8 @@ describe("OffersLogsDashboard", () => {
     expect(mockedFetchOffersLogs).toHaveBeenCalledWith(
       expect.objectContaining({
         propertyId: "demo_property",
+        from: "1970-01-01T00:00:00.000Z",
+        to: "9999-12-31T23:59:59.999Z",
       }),
     );
   });
@@ -134,6 +136,24 @@ describe("OffersLogsDashboard", () => {
       expect(optionLabels[0]).toBe("Demo Property");
       expect(optionLabels.slice(1)).toEqual(["Demo Hotel San Francisco", "Demo Hotel New York"]);
     });
+  });
+
+  it("hides time presets and window text", async () => {
+    mockedFetchOffersLogs.mockResolvedValue({
+      serverNow: new Date().toISOString(),
+      pageInfo: {
+        hasMore: false,
+        limit: 25,
+      },
+      rows: [],
+    });
+
+    renderDashboard();
+
+    expect(screen.queryByRole("button", { name: "24h" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "7d" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "30d" })).toBeNull();
+    expect(screen.queryByText(/Window:/)).toBeNull();
   });
 
   it("does not emit hydration mismatch when time changes between server and client", async () => {
