@@ -1,5 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
+import { hydrateRoot } from "react-dom/client";
+import { renderToString } from "react-dom/server";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -40,10 +42,14 @@ function renderDashboard() {
     },
   });
 
-  return render(
+  return render(createDashboardTree(queryClient));
+}
+
+function createDashboardTree(queryClient: QueryClient) {
+  return (
     <QueryClientProvider client={queryClient}>
       <OffersLogsDashboard />
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
 }
 
@@ -105,6 +111,61 @@ describe("OffersLogsDashboard", () => {
         propertyId: "demo_hotel_sf",
       }),
     );
+  });
+
+  it("does not emit hydration mismatch when time changes between server and client", async () => {
+    mockedFetchOffersLogs.mockResolvedValue({
+      serverNow: new Date().toISOString(),
+      pageInfo: {
+        hasMore: false,
+        limit: 25,
+      },
+      rows: [],
+    });
+
+    mockedFetchProperties.mockResolvedValue([]);
+
+    vi.useFakeTimers();
+    let errorSpy: ReturnType<typeof vi.spyOn> | undefined;
+    let root: ReturnType<typeof hydrateRoot> | undefined;
+
+    try {
+      vi.setSystemTime(new Date("2026-03-01T10:16:53.000Z"));
+
+      const serverTree = createDashboardTree(new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      }));
+      const html = renderToString(serverTree);
+
+      const container = document.createElement("div");
+      container.innerHTML = html;
+
+      errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      vi.setSystemTime(new Date("2026-03-01T10:16:54.000Z"));
+
+      await act(async () => {
+        root = hydrateRoot(
+          container,
+          createDashboardTree(new QueryClient({
+            defaultOptions: { queries: { retry: false } },
+          })),
+        );
+        await Promise.resolve();
+      });
+
+      expect(
+        errorSpy.mock.calls.some(([value]) =>
+          String(value).includes("Hydration failed because the server rendered text didn't match the client"),
+        ),
+      ).toBe(false);
+    } finally {
+      await act(async () => {
+        root?.unmount();
+      });
+      errorSpy?.mockRestore();
+      vi.useRealTimers();
+    }
   });
 
   it("opens detail drawer with presented offers, why, candidates, and timeline", async () => {

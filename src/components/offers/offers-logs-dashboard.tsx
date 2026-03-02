@@ -169,7 +169,10 @@ export function OffersLogsDashboard() {
     () => searchParams.get("selectedDecisionId") ?? "",
   );
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [window, setWindow] = useState(() => buildWindowFromPreset(resolvePreset(searchParams.get("preset"))));
+  const [window, setWindow] = useState<{ fromIso: string; toIso: string }>({
+    fromIso: "",
+    toIso: "",
+  });
 
   const hasMountedRef = useRef(false);
 
@@ -185,6 +188,10 @@ export function OffersLogsDashboard() {
     setPropertyId(propertiesQuery.data[0].propertyId);
   }, [propertyId, propertiesQuery.data]);
 
+  useEffect(() => {
+    setWindow(buildWindowFromPreset(preset));
+  }, [preset]);
+
   const listQuery = useInfiniteQuery({
     queryKey: ["offer-logs", propertyId, window.fromIso, window.toIso],
     queryFn: ({ pageParam }) =>
@@ -195,7 +202,7 @@ export function OffersLogsDashboard() {
         cursor: pageParam as string | undefined,
         limit: 25,
       }),
-    enabled: Boolean(propertyId),
+    enabled: Boolean(propertyId && window.fromIso && window.toIso),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => (lastPage.pageInfo.hasMore ? lastPage.pageInfo.nextCursor : undefined),
   });
@@ -240,7 +247,6 @@ export function OffersLogsDashboard() {
 
   function handlePresetChange(nextPreset: DatePreset) {
     setPreset(nextPreset);
-    setWindow(buildWindowFromPreset(nextPreset));
   }
 
   function openDetail(decisionId: string) {
