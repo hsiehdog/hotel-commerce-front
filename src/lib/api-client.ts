@@ -137,14 +137,23 @@ export type OffersLogsListRow = {
   decisionId: string;
   requestId: string;
   propertyId: string;
+  property?: string | null;
   tenantId?: string;
   eventRecordedAt: string;
+  recordedAt?: string | null;
   channel: string;
   checkIn?: string | null;
   checkOut?: string | null;
   rooms?: number | null;
   adults?: number | null;
   children?: number | null;
+  createdOutbox?: {
+    state: AuditOutboxState;
+    attempts?: number | null;
+    lastErrorSafeMessage?: string | null;
+  } | null;
+  primaryOfferName?: string | null;
+  primaryOfferTotal?: number | null;
   decisionStatus: OffersLogDecisionStatus;
   offersCount: number;
   truncated: boolean;
@@ -230,12 +239,18 @@ export type OffersLogPresentedOffer = {
 export type OffersLogTopCandidate = {
   offerId?: string | null;
   roomTypeId?: string | null;
+  roomTypeName?: string | null;
   ratePlanId?: string | null;
+  ratePlanName?: string | null;
   score?: number | null;
+  scoreTotal?: number | null;
+  archetype?: string | null;
+  components?: Record<string, number> | null;
   rank?: number | null;
   totalPrice?: number | null;
   currency?: string | null;
   basis?: string | null;
+  roomsAvailable?: number | null;
   exclusionReason?: string | null;
 };
 
@@ -303,6 +318,9 @@ export type OffersLogsDetailResponse = {
     rawDebugPayload?: unknown;
     payloadTruncatedForResponse?: boolean;
   };
+  generateResponse?: {
+    data?: Record<string, unknown>;
+  } | null;
 };
 
 type AIChatResponse = {
@@ -1008,6 +1026,11 @@ function normalizeOffersLogsListResponse(payload: unknown): OffersLogsListRespon
 
 function normalizeOffersLogsListRow(rawRow: unknown): OffersLogsListRow {
   const row = isRecord(rawRow) ? rawRow : {};
+  const createdOutbox = isRecord(row.createdOutbox)
+    ? row.createdOutbox
+    : isRecord(row.created_outbox)
+      ? row.created_outbox
+      : null;
   const reasonCodes = toStringArray(
     Array.isArray(row.reasonCodes) ? row.reasonCodes : row.reason_codes,
   );
@@ -1029,16 +1052,36 @@ function normalizeOffersLogsListRow(rawRow: unknown): OffersLogsListRow {
     decisionId: firstString(row.decisionId, row.decision_id) ?? "",
     requestId: firstString(row.requestId, row.request_id) ?? "",
     propertyId: firstString(row.propertyId, row.property_id) ?? "",
+    property: firstString(row.property),
     tenantId: firstString(row.tenantId, row.tenant_id),
     eventRecordedAt:
       firstString(row.eventRecordedAt, row.event_recorded_at, row.createdAt, row.created_at) ??
       new Date().toISOString(),
+    recordedAt: firstString(row.recordedAt, row.recorded_at, row.eventRecordedAt, row.event_recorded_at),
     channel: firstString(row.channel) ?? "-",
     checkIn: firstString(row.checkIn, row.check_in),
     checkOut: firstString(row.checkOut, row.check_out),
     rooms: firstNumber(row.rooms),
     adults: firstNumber(row.adults),
     children: firstNumber(row.children),
+    createdOutbox: createdOutbox
+      ? {
+          state:
+            firstString(createdOutbox.state) === "PENDING" ||
+            firstString(createdOutbox.state) === "ENQUEUED" ||
+            firstString(createdOutbox.state) === "PROCESSED" ||
+            firstString(createdOutbox.state) === "DLQ"
+              ? (firstString(createdOutbox.state) as AuditOutboxState)
+              : "PENDING",
+          attempts: firstNumber(createdOutbox.attempts),
+          lastErrorSafeMessage: firstString(
+            createdOutbox.lastErrorSafeMessage,
+            createdOutbox.last_error_safe_message,
+          ),
+        }
+      : null,
+    primaryOfferName: firstString(row.primaryOfferName, row.primary_offer_name),
+    primaryOfferTotal: firstNumber(row.primaryOfferTotal, row.primary_offer_total),
     decisionStatus:
       decisionStatus === "OK" ||
       decisionStatus === "NO_OFFERS" ||

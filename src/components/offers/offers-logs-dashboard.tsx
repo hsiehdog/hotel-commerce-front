@@ -1,22 +1,34 @@
 "use client";
 
-import { useInfiniteQuery, useQueries, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  OffersLogsDetailResponse,
   AuditOutboxState,
-  OffersLogPresentedOffer,
-  OffersLogTopCandidate,
   fetchOffersLogDetail,
   fetchOffersLogs,
   fetchProperties,
 } from "@/lib/api-client";
+import {
+  buildDeltaLine,
+  getPrimaryOffer,
+  getSecondaryOffer,
+  groupReasonCodes,
+  parseOffersResponse,
+} from "@/lib/offers-demo";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { asRecord } from "./dashboard/utils";
+import { buildEffectiveConfigRows } from "./dashboard/dashboard-logic";
+import { DecisionSummary } from "./dashboard/decision-summary";
+import { GuestProfile } from "./dashboard/guest-profile";
+import { CandidateAnalysis } from "./dashboard/candidate-analysis";
+import { DebugPanel } from "./dashboard/debug-panel";
 
 const DEFAULT_PROPERTY_ID = "demo_property";
 const ALL_TIME_FROM_ISO = "1970-01-01T00:00:00.000Z";
@@ -66,22 +78,6 @@ function formatCurrency(amount?: number | null): string {
   }
 }
 
-function formatDuration(ms?: number | null): string {
-  if (ms === null || ms === undefined) {
-    return "-";
-  }
-  if (ms < 1_000) {
-    return `${ms}ms`;
-  }
-  const seconds = ms / 1_000;
-  if (seconds < 60) {
-    return `${seconds.toFixed(1)}s`;
-  }
-  const minutes = Math.floor(seconds / 60);
-  const remainder = Math.round(seconds % 60);
-  return `${minutes}m ${remainder}s`;
-}
-
 function getOutboxBadgeVariant(state?: AuditOutboxState | null): "outline" | "secondary" | "destructive" {
   if (state === "DLQ") {
     return "destructive";
@@ -90,30 +86,6 @@ function getOutboxBadgeVariant(state?: AuditOutboxState | null): "outline" | "se
     return "secondary";
   }
   return "outline";
-}
-
-function matchesOffer(candidate: OffersLogTopCandidate, offer: OffersLogPresentedOffer): boolean {
-  if (candidate.offerId && offer.offerId && candidate.offerId === offer.offerId) {
-    return true;
-  }
-
-  if (
-    candidate.roomTypeId &&
-    candidate.ratePlanId &&
-    offer.roomTypeId &&
-    offer.ratePlanId &&
-    candidate.roomTypeId === offer.roomTypeId &&
-    candidate.ratePlanId === offer.ratePlanId
-  ) {
-    return true;
-  }
-
-  return false;
-}
-
-function copyToClipboard(value: unknown) {
-  const payload = JSON.stringify(value ?? {}, null, 2);
-  void navigator.clipboard.writeText(payload);
 }
 
 function getPrimaryOfferNameFromRow(row: {
@@ -146,12 +118,6 @@ function formatPropertyLabel(label: string): string {
     .join(" ");
 }
 
-type PrimaryOfferDisplay = {
-  name: string;
-  totalPrice?: number | null;
-  currency?: string | null;
-};
-
 type BasicOfferDetails = {
   checkIn?: string | null;
   checkOut?: string | null;
@@ -160,10 +126,508 @@ type BasicOfferDetails = {
   children?: number | null;
 };
 
-type RowEnrichment = {
-  primary: PrimaryOfferDisplay;
-  basic: BasicOfferDetails;
-};
+function toRecordOrNull(value: unknown): Record<string, unknown> | null {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return null;
+}
+
+function toRecord(value: unknown): Record<string, unknown> {
+  return toRecordOrNull(value) ?? {};
+}
+
+function pickFirstDefined(...values: unknown[]): unknown {
+  for (const value of values) {
+    if (value !== undefined && value !== null) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function pickFirstString(...values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function buildProfileFallback(
+  detail: OffersLogsDetailResponse,
+  generateResponseData: Record<string, unknown>,
+  generatedDebug: Record<string, unknown>,
+  corePayload: Record<string, unknown>,
+): Record<string, unknown> {
+  const coreProfile = asRecord(corePayload.profile);
+  const requestContext = asRecord(corePayload.requestContext);
+  const profile = asRecord(generateResponseData.profile);
+  const profileFinal = asRecord(generateResponseData.profileFinal);
+  const profilePreAri = asRecord(generateResponseData.profilePreAri);
+  const fallback: Record<string, unknown> = {};
+  const tripType = pickFirstString(
+    generatedDebug.tripType,
+    generatedDebug.trip_type,
+    coreProfile.tripType,
+    coreProfile.trip_type,
+    profile.tripType,
+    profile.trip_type,
+    profileFinal.tripType,
+    profileFinal.trip_type,
+    profilePreAri.tripType,
+    profilePreAri.trip_type,
+    generateResponseData.tripType,
+    generateResponseData.trip_type,
+  );
+  const decisionPosture = pickFirstString(
+    generatedDebug.decisionPosture,
+    generatedDebug.decision_posture,
+    coreProfile.decisionPosture,
+    coreProfile.decision_posture,
+    profile.decisionPosture,
+    profile.decision_posture,
+    profileFinal.decisionPosture,
+    profileFinal.decision_posture,
+    profilePreAri.decisionPosture,
+    profilePreAri.decision_posture,
+    generateResponseData.decisionPosture,
+    generateResponseData.decision_posture,
+  );
+
+  if (tripType) {
+    fallback.tripType = tripType;
+  }
+  if (decisionPosture) {
+    fallback.decisionPosture = decisionPosture;
+  }
+  if (!tripType) {
+    const children = Number(
+      pickFirstDefined(
+        requestContext.children,
+        detail.decision.children,
+        0,
+      ),
+    );
+    const adults = Number(
+      pickFirstDefined(
+        requestContext.adults,
+        detail.decision.adults,
+        0,
+      ),
+    );
+    if (children > 0) {
+      fallback.tripType = "family";
+    } else if (adults <= 1) {
+      fallback.tripType = "solo";
+    } else if (adults >= 2) {
+      fallback.tripType = "couple";
+    }
+  }
+  return fallback;
+}
+
+function mergeProfileWithFallback(
+  source: unknown,
+  fallback: Record<string, unknown>,
+): Record<string, unknown> {
+  const merged = { ...asRecord(source) };
+  const currentTripType = pickFirstString(merged.tripType, merged.trip_type);
+  const fallbackTripType = pickFirstString(fallback.tripType, fallback.trip_type);
+  const currentPosture = pickFirstString(merged.decisionPosture, merged.decision_posture);
+  const fallbackPosture = pickFirstString(fallback.decisionPosture, fallback.decision_posture);
+
+  if ((!currentTripType || currentTripType.toLowerCase() === "unknown") && fallbackTripType) {
+    merged.tripType = fallbackTripType;
+  }
+  if ((!currentPosture || currentPosture.toLowerCase() === "unknown") && fallbackPosture) {
+    merged.decisionPosture = fallbackPosture;
+  }
+
+  return merged;
+}
+
+function normalizeId(value: unknown): string {
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+function humanizeCandidateId(value: unknown): string {
+  if (typeof value !== "string" || !value.trim()) {
+    return "";
+  }
+  const normalized = value
+    .trim()
+    .replace(/^rt_/i, "")
+    .replace(/^rp_/i, "")
+    .replace(/_/g, " ")
+    .toLowerCase();
+
+  return normalized
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => {
+      if (word === "acc") {
+        return "Accessible";
+      }
+      if (word === "qn") {
+        return "Queen";
+      }
+      return word.charAt(0).toUpperCase() + word.slice(1);
+    })
+    .join(" ");
+}
+
+function enrichTopCandidatesWithNames(
+  candidates: Array<Record<string, unknown>>,
+  offers: Array<{ offerId: string; room: string; ratePlan: string; raw: Record<string, unknown> }>,
+): Array<Record<string, unknown>> {
+  const byOfferId = new Map<string, { room: string; ratePlan: string }>();
+  const byRoomRate = new Map<string, { room: string; ratePlan: string }>();
+
+  for (const offer of offers) {
+    const offerIdKey = normalizeId(offer.offerId);
+    const roomTypeId = normalizeId((offer.raw.roomType as { id?: string } | undefined)?.id ?? offer.raw.room_type_id);
+    const ratePlanId = normalizeId((offer.raw.ratePlan as { id?: string } | undefined)?.id ?? offer.raw.rate_plan_id);
+    const names = { room: offer.room, ratePlan: offer.ratePlan };
+    if (offerIdKey) {
+      byOfferId.set(offerIdKey, names);
+    }
+    if (roomTypeId && ratePlanId) {
+      byRoomRate.set(`${roomTypeId}:${ratePlanId}`, names);
+    }
+  }
+
+  return candidates.map((candidate) => {
+    const existingRoom = pickFirstString(candidate.roomTypeName, candidate.roomType, candidate.room_type);
+    const existingRate = pickFirstString(candidate.ratePlanName, candidate.ratePlan, candidate.rate_plan);
+    if (existingRoom && existingRate) {
+      return candidate;
+    }
+
+    const offerIdKey = normalizeId(candidate.offerId ?? candidate.offer_id);
+    const roomTypeIdKey = normalizeId(candidate.roomTypeId ?? candidate.room_type_id);
+    const ratePlanIdKey = normalizeId(candidate.ratePlanId ?? candidate.rate_plan_id);
+    const fromOfferId = offerIdKey ? byOfferId.get(offerIdKey) : undefined;
+    const fromRoomRate =
+      !fromOfferId && roomTypeIdKey && ratePlanIdKey
+        ? byRoomRate.get(`${roomTypeIdKey}:${ratePlanIdKey}`)
+        : undefined;
+    const match = fromOfferId ?? fromRoomRate;
+    if (!match) {
+      const derivedRoom = humanizeCandidateId(candidate.roomTypeId ?? candidate.room_type_id);
+      const derivedRate = humanizeCandidateId(candidate.ratePlanId ?? candidate.rate_plan_id);
+      if (!derivedRoom && !derivedRate) {
+        return candidate;
+      }
+      return {
+        ...candidate,
+        roomTypeName: existingRoom ?? derivedRoom,
+        ratePlanName: existingRate ?? derivedRate,
+      };
+    }
+
+    return {
+      ...candidate,
+      roomTypeName: existingRoom ?? match.room,
+      ratePlanName: existingRate ?? match.ratePlan,
+    };
+  });
+}
+
+function toFiniteNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return null;
+}
+
+function solveLinearSystem(matrix: number[][], vector: number[]): number[] | null {
+  const n = matrix.length;
+  const a = matrix.map((row, i) => [...row, vector[i]]);
+  for (let col = 0; col < n; col += 1) {
+    let pivot = col;
+    for (let row = col + 1; row < n; row += 1) {
+      if (Math.abs(a[row][col]) > Math.abs(a[pivot][col])) {
+        pivot = row;
+      }
+    }
+    if (Math.abs(a[pivot][col]) < 1e-9) {
+      return null;
+    }
+    if (pivot !== col) {
+      [a[col], a[pivot]] = [a[pivot], a[col]];
+    }
+    const pivotValue = a[col][col];
+    for (let j = col; j <= n; j += 1) {
+      a[col][j] /= pivotValue;
+    }
+    for (let row = 0; row < n; row += 1) {
+      if (row === col) {
+        continue;
+      }
+      const factor = a[row][col];
+      for (let j = col; j <= n; j += 1) {
+        a[row][j] -= factor * a[col][j];
+      }
+    }
+  }
+  return a.map((row) => row[n]);
+}
+
+function inferScoringWeightsFromCandidates(candidates: Array<Record<string, unknown>>): Record<string, number> | null {
+  const rows: Array<{ x: number[]; y: number }> = [];
+  for (const candidate of candidates) {
+    const components = asRecord(candidate.components ?? candidate.scoreComponents ?? candidate.scoringComponents);
+    const value = toFiniteNumber(components.valueScore ?? components.value_score ?? components.value);
+    const conversion = toFiniteNumber(components.conversionScore ?? components.conversion_score ?? components.conversion);
+    const experience = toFiniteNumber(components.experienceScore ?? components.experience_score ?? components.experience);
+    const margin = toFiniteNumber(
+      components.marginProxyScore ??
+      components.margin_proxy_score ??
+      components.marginScore ??
+      components.margin_score ??
+      components.margin,
+    );
+    const risk = toFiniteNumber(components.riskScore ?? components.risk_score ?? components.riskPenalty ?? components.risk_penalty ?? components.risk);
+    const score = toFiniteNumber(candidate.scoreTotal ?? candidate.totalScore ?? candidate.score);
+    if (
+      value === null ||
+      conversion === null ||
+      experience === null ||
+      margin === null ||
+      risk === null ||
+      score === null
+    ) {
+      continue;
+    }
+    rows.push({ x: [value, conversion, experience, margin, -risk], y: score });
+  }
+  if (rows.length < 5) {
+    return null;
+  }
+
+  const size = 5;
+  const ata = Array.from({ length: size }, () => Array.from({ length: size }, () => 0));
+  const atb = Array.from({ length: size }, () => 0);
+  for (const row of rows) {
+    for (let i = 0; i < size; i += 1) {
+      atb[i] += row.x[i] * row.y;
+      for (let j = 0; j < size; j += 1) {
+        ata[i][j] += row.x[i] * row.x[j];
+      }
+    }
+  }
+  const solution = solveLinearSystem(ata, atb);
+  if (!solution) {
+    return null;
+  }
+  const [value, conversion, experience, margin, risk] = solution;
+  if ([value, conversion, experience, margin, risk].some((entry) => !Number.isFinite(entry))) {
+    return null;
+  }
+
+  return { value, conversion, experience, margin, risk };
+}
+
+function mapDetailToParsedOffersResponse(detail: OffersLogsDetailResponse) {
+  const generateResponseData = toRecord((toRecordOrNull(detail.generateResponse) ?? {}).data);
+  const corePayload = toRecord(detail.normalized.rawCorePayload);
+  const debugPayload = toRecord(detail.normalized.rawDebugPayload);
+  const generatedDebug = toRecord(generateResponseData.debug);
+  const strategyPayload = asRecord(corePayload.strategy);
+  const strategyWeights = toRecordOrNull(
+    pickFirstDefined(
+      strategyPayload.weights,
+      strategyPayload.scoringWeights,
+      strategyPayload.scoring_weights,
+      strategyPayload.weightVector,
+      strategyPayload.weight_vector,
+    ),
+  );
+  const coreDebug = toRecord(corePayload.debug);
+  const nestedDebug = toRecord(debugPayload.debug);
+
+  const mergedDebug: Record<string, unknown> = {
+    ...generatedDebug,
+    ...coreDebug,
+    ...nestedDebug,
+    ...debugPayload,
+    resolvedRequest: pickFirstDefined(
+      generatedDebug.resolvedRequest,
+      generatedDebug.resolved_request,
+      coreDebug.resolvedRequest,
+      coreDebug.resolved_request,
+      nestedDebug.resolvedRequest,
+      nestedDebug.resolved_request,
+      debugPayload.resolvedRequest,
+      debugPayload.resolved_request,
+      detail.normalized.resolvedRequest,
+    ),
+    profilePreAri: pickFirstDefined(
+      generatedDebug.profilePreAri,
+      generatedDebug.profile_pre_ari,
+      coreDebug.profilePreAri,
+      coreDebug.profile_pre_ari,
+      nestedDebug.profilePreAri,
+      nestedDebug.profile_pre_ari,
+      debugPayload.profilePreAri,
+      debugPayload.profile_pre_ari,
+    ),
+    profileFinal: pickFirstDefined(
+      generatedDebug.profileFinal,
+      generatedDebug.profile_final,
+      coreDebug.profileFinal,
+      coreDebug.profile_final,
+      nestedDebug.profileFinal,
+      nestedDebug.profile_final,
+      debugPayload.profileFinal,
+      debugPayload.profile_final,
+    ),
+    scoring: pickFirstDefined(
+      generatedDebug.scoring,
+      generateResponseData.scoring,
+      toRecordOrNull(generateResponseData.weights) ? { weights: generateResponseData.weights } : null,
+      toRecordOrNull(generateResponseData.scoringWeights) ? { weights: generateResponseData.scoringWeights } : null,
+      toRecordOrNull(generatedDebug.weights) ? { weights: generatedDebug.weights } : null,
+      strategyWeights ? { weights: strategyWeights } : null,
+      coreDebug.scoring,
+      nestedDebug.scoring,
+      debugPayload.scoring,
+    ),
+    selectionSummary: pickFirstDefined(
+      generatedDebug.selectionSummary,
+      generatedDebug.selection_summary,
+      coreDebug.selectionSummary,
+      coreDebug.selection_summary,
+      nestedDebug.selectionSummary,
+      nestedDebug.selection_summary,
+      debugPayload.selectionSummary,
+      debugPayload.selection_summary,
+      detail.normalized.selectionSummary,
+    ),
+    topCandidates: pickFirstDefined(
+      generatedDebug.topCandidates,
+      generatedDebug.top_candidates,
+      coreDebug.topCandidates,
+      coreDebug.top_candidates,
+      nestedDebug.topCandidates,
+      nestedDebug.top_candidates,
+      debugPayload.topCandidates,
+      debugPayload.top_candidates,
+      detail.normalized.topCandidates,
+    ),
+  };
+
+  const parseInput = {
+    ...corePayload,
+    ...generateResponseData,
+    propertyId: pickFirstString(
+      generateResponseData.propertyId,
+      generateResponseData.property_id,
+      corePayload.propertyId,
+      corePayload.property_id,
+      detail.decision.propertyId,
+    ),
+    channel: pickFirstString(generateResponseData.channel, corePayload.channel, detail.decision.channel) ?? "-",
+    currency: pickFirstString(
+      generateResponseData.currency,
+      corePayload.currency,
+      detail.decision.currency,
+      detail.normalized.presentedOffers[0]?.currency,
+      "USD",
+    ),
+    priceBasisUsed: pickFirstString(
+      generateResponseData.priceBasisUsed,
+      generateResponseData.price_basis_used,
+      corePayload.priceBasisUsed,
+      corePayload.price_basis_used,
+      detail.decision.priceBasisUsed,
+      detail.normalized.presentedOffers[0]?.basis,
+      "afterTax",
+    ),
+    configVersion: pickFirstDefined(
+      generateResponseData.configVersion,
+      generateResponseData.config_version,
+      corePayload.configVersion,
+      corePayload.config_version,
+      detail.normalized.configVersion,
+      detail.events[0]?.configVersion,
+      "-",
+    ),
+    offers: pickFirstDefined(
+      generateResponseData.offers,
+      generateResponseData.selectedOffers,
+      generateResponseData.selected_offers,
+      generateResponseData.recommendations,
+      corePayload.offers,
+      corePayload.selectedOffers,
+      corePayload.selected_offers,
+      corePayload.recommendations,
+      detail.normalized.presentedOffers,
+    ),
+    reasonCodes: pickFirstDefined(
+      generateResponseData.reasonCodes,
+      generateResponseData.reason_codes,
+      corePayload.reasonCodes,
+      corePayload.reason_codes,
+      detail.normalized.globalReasonCodes,
+    ),
+    debug: mergedDebug,
+  };
+
+  const parsed = parseOffersResponse({ data: parseInput });
+  const profileFallback = buildProfileFallback(detail, generateResponseData, generatedDebug, corePayload);
+  const enrichedTopCandidates = enrichTopCandidatesWithNames(parsed.debug.topCandidates, parsed.offers);
+  const inferredWeights = inferScoringWeightsFromCandidates(enrichedTopCandidates);
+  const parsedScoring = asRecord(parsed.debug.scoring);
+  const parsedWeights = asRecord(parsedScoring.weights);
+  const mergedScoring = {
+    ...parsedScoring,
+    weights: Object.keys(parsedWeights).length > 0
+      ? parsedWeights
+      : (inferredWeights ?? parsedWeights),
+  };
+  return {
+    ...parsed,
+    propertyId: parsed.propertyId === "-" ? detail.decision.propertyId : parsed.propertyId,
+    channel: parsed.channel === "-" ? (detail.decision.channel || "-") : parsed.channel,
+    currency: parsed.currency === "-" ? (detail.decision.currency || "USD") : parsed.currency,
+    priceBasisUsed:
+      parsed.priceBasisUsed === "-"
+        ? pickFirstString(detail.decision.priceBasisUsed, detail.normalized.presentedOffers[0]?.basis, "afterTax") ?? "afterTax"
+        : parsed.priceBasisUsed,
+    configVersion:
+      parsed.configVersion === "-"
+        ? String(detail.normalized.configVersion ?? detail.events[0]?.configVersion ?? "-")
+        : parsed.configVersion,
+    reasonCodes: parsed.reasonCodes.length > 0 ? parsed.reasonCodes : detail.normalized.globalReasonCodes,
+    debug: {
+      ...parsed.debug,
+      resolvedRequest: parsed.debug.resolvedRequest ?? detail.normalized.resolvedRequest ?? null,
+      selectionSummary: parsed.debug.selectionSummary ?? detail.normalized.selectionSummary ?? null,
+      profilePreAri: mergeProfileWithFallback(parsed.debug.profilePreAri, profileFallback),
+      profileFinal: mergeProfileWithFallback(parsed.debug.profileFinal, profileFallback),
+      scoring: mergedScoring,
+      topCandidates:
+        enrichedTopCandidates.length > 0
+          ? enrichedTopCandidates
+          : (detail.normalized.topCandidates ?? []).map((candidate) => ({ ...candidate })),
+    },
+    raw: {
+      ...parsed.raw,
+      decision: detail.decision,
+      events: detail.events,
+      normalized: detail.normalized,
+    },
+  };
+}
 
 function formatMonthDayYear(date: Date): string {
   const month = new Intl.DateTimeFormat("en-US", { month: "short" }).format(date);
@@ -210,49 +674,6 @@ function formatBasicOfferDetails(details: BasicOfferDetails): string {
   return `${dateRange} | ${rooms} room${rooms === 1 ? "" : "s"} | ${adults}A/${children}C`;
 }
 
-function getPrimaryOfferFromPresentedOffers(
-  detail: Awaited<ReturnType<typeof fetchOffersLogDetail>>,
-): PrimaryOfferDisplay | null {
-  const presentedOffers = detail.normalized.presentedOffers;
-  if (presentedOffers.length === 0) {
-    return null;
-  }
-
-  const recommendedOffer = presentedOffers.find((offer) => offer.recommended);
-  const primaryOffer = recommendedOffer ?? presentedOffers[0];
-  const nameParts = [primaryOffer.roomTypeName, primaryOffer.ratePlanName].filter(Boolean);
-  const name = nameParts.length > 0
-    ? nameParts.join(" - ")
-    : primaryOffer.offerId || "-";
-
-  return {
-    name,
-    totalPrice: primaryOffer.totalPrice,
-    currency: primaryOffer.currency,
-  };
-}
-
-function resolvePrimaryValues(
-  row: {
-    primaryOfferRoomTypeName?: string | null;
-    primaryOfferRatePlanName?: string | null;
-    primaryOfferTotalPrice?: number | null;
-    primaryOfferCurrency?: string | null;
-  },
-  fallbackPrimary?: PrimaryOfferDisplay,
-) {
-  const primaryName = getPrimaryOfferNameFromRow(row);
-  return {
-    name: primaryName === "-" ? (fallbackPrimary?.name ?? "-") : primaryName,
-    totalPrice: row.primaryOfferTotalPrice ?? fallbackPrimary?.totalPrice ?? null,
-    currency: row.primaryOfferCurrency ?? fallbackPrimary?.currency ?? null,
-  };
-}
-
-function hasMissingBasicDetails(details: BasicOfferDetails): boolean {
-  return !details.checkIn || !details.checkOut || details.rooms === null || details.rooms === undefined;
-}
-
 export function OffersLogsDashboard() {
   const pathname = usePathname();
   const router = useRouter();
@@ -263,6 +684,7 @@ export function OffersLogsDashboard() {
     () => searchParams.get("selectedDecisionId") ?? "",
   );
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [expandedCandidate, setExpandedCandidate] = useState<string | null>(null);
 
   const hasMountedRef = useRef(false);
 
@@ -297,70 +719,9 @@ export function OffersLogsDashboard() {
     [listQuery.data?.pages],
   );
 
-  const rowsNeedingDetailEnrichment = useMemo(
-    () =>
-      rows.filter((row) => {
-        const missingName = !row.primaryOfferRoomTypeName && !row.primaryOfferRatePlanName;
-        const missingTotal = row.primaryOfferTotalPrice === null || row.primaryOfferTotalPrice === undefined;
-        const missingBasic = hasMissingBasicDetails({
-          checkIn: row.checkIn,
-          checkOut: row.checkOut,
-          rooms: row.rooms,
-          adults: row.adults,
-          children: row.children,
-        });
-        return missingName || missingTotal || missingBasic;
-      }),
-    [rows],
-  );
-
-  const rowDetailQueries = useQueries({
-    queries: rowsNeedingDetailEnrichment.map((row) => ({
-      queryKey: ["offer-log-row-primary", row.decisionId],
-      queryFn: () => fetchOffersLogDetail(row.decisionId, { includeRawPayloads: false }),
-      staleTime: 60_000,
-      enabled: Boolean(row.decisionId),
-    })),
-  });
-
-  const fallbackRowDataByDecisionId = useMemo(() => {
-    const map = new Map<string, RowEnrichment>();
-    rowsNeedingDetailEnrichment.forEach((row, index) => {
-      const detail = rowDetailQueries[index]?.data;
-      if (!detail) {
-        return;
-      }
-      const primary = getPrimaryOfferFromPresentedOffers(detail);
-      if (primary) {
-        map.set(row.decisionId, {
-          primary,
-          basic: {
-            checkIn: detail.decision.checkIn,
-            checkOut: detail.decision.checkOut,
-            rooms: detail.decision.rooms,
-            adults: detail.decision.adults,
-            children: detail.decision.children,
-          },
-        });
-      } else {
-        map.set(row.decisionId, {
-          primary: { name: "-", totalPrice: null, currency: null },
-          basic: {
-            checkIn: detail.decision.checkIn,
-            checkOut: detail.decision.checkOut,
-            rooms: detail.decision.rooms,
-            adults: detail.decision.adults,
-            children: detail.decision.children,
-          },
-        });
-      }
-    });
-    return map;
-  }, [rowDetailQueries, rowsNeedingDetailEnrichment]);
-
   const detailQuery = useQuery({
     queryKey: ["offer-log-detail", selectedDecisionId],
-    queryFn: () => fetchOffersLogDetail(selectedDecisionId, { includeRawPayloads: false }),
+    queryFn: () => fetchOffersLogDetail(selectedDecisionId, { includeRawPayloads: true, payloadCapKb: 512 }),
     enabled: Boolean(selectedDecisionId),
   });
 
@@ -393,16 +754,24 @@ export function OffersLogsDashboard() {
   function openDetail(decisionId: string) {
     setSelectedDecisionId(decisionId);
     setIsDrawerOpen(true);
+    setExpandedCandidate(null);
   }
-
-  const shouldExpandTimeline = Boolean(
-    detailQuery.data && (
-      detailQuery.data.decision.decisionStatus === "ERROR" ||
-      (detailQuery.data.decision.httpStatus ?? 0) >= 400 ||
-      detailQuery.data.events.some((entry) => entry.outbox?.state === "DLQ") ||
-      detailQuery.data.integrityFlags.multipleCreatedEvents ||
-      detailQuery.data.integrityFlags.missingCreatedEvent
-    ),
+  const parsedDetailResponse = useMemo(
+    () => (detailQuery.data ? mapDetailToParsedOffersResponse(detailQuery.data) : null),
+    [detailQuery.data],
+  );
+  const primaryOffer = parsedDetailResponse ? getPrimaryOffer(parsedDetailResponse.offers) : null;
+  const secondaryOffer = parsedDetailResponse ? getSecondaryOffer(parsedDetailResponse.offers) : null;
+  const deltaLine = buildDeltaLine(primaryOffer, secondaryOffer);
+  const reasonGroups = groupReasonCodes(parsedDetailResponse?.reasonCodes ?? []);
+  const allCandidates = parsedDetailResponse?.debug.topCandidates ?? [];
+  const requestPayload = toRecordOrNull(parsedDetailResponse?.debug.resolvedRequest ?? null);
+  const effectiveConfigRows = buildEffectiveConfigRows(parsedDetailResponse, requestPayload);
+  const profilePreAri = useMemo(() => asRecord(parsedDetailResponse?.debug.profilePreAri), [parsedDetailResponse]);
+  const profileFinal = useMemo(() => asRecord(parsedDetailResponse?.debug.profileFinal), [parsedDetailResponse]);
+  const scoringWeights = useMemo(
+    () => asRecord(asRecord(parsedDetailResponse?.debug.scoring).weights),
+    [parsedDetailResponse],
   );
 
   return (
@@ -479,15 +848,16 @@ export function OffersLogsDashboard() {
                   </thead>
                   <tbody>
                     {rows.map((row) => {
-                      const fallbackRowData = fallbackRowDataByDecisionId.get(row.decisionId);
-                      const resolvedPrimary = resolvePrimaryValues(row, fallbackRowData?.primary);
                       const resolvedBasic: BasicOfferDetails = {
-                        checkIn: row.checkIn ?? fallbackRowData?.basic.checkIn,
-                        checkOut: row.checkOut ?? fallbackRowData?.basic.checkOut,
-                        rooms: row.rooms ?? fallbackRowData?.basic.rooms ?? null,
-                        adults: row.adults ?? fallbackRowData?.basic.adults ?? null,
-                        children: row.children ?? fallbackRowData?.basic.children ?? null,
+                        checkIn: row.checkIn ?? null,
+                        checkOut: row.checkOut ?? null,
+                        rooms: row.rooms ?? null,
+                        adults: row.adults ?? null,
+                        children: row.children ?? null,
                       };
+                      const primaryName = row.primaryOfferName ?? getPrimaryOfferNameFromRow(row);
+                      const primaryTotal = row.primaryOfferTotal ?? row.primaryOfferTotalPrice ?? null;
+                      const createdOutboxState = row.createdOutbox?.state ?? row.createdEventOutboxState;
                       return (
                       <tr
                         key={row.decisionId}
@@ -497,20 +867,20 @@ export function OffersLogsDashboard() {
                         )}
                         onClick={() => openDetail(row.decisionId)}
                       >
-                        <td className="px-2 py-3">{formatDateTimeWithoutSeconds(row.eventRecordedAt)}</td>
+                        <td className="px-2 py-3">{formatDateTimeWithoutSeconds(row.recordedAt ?? row.eventRecordedAt)}</td>
                         <td className="px-2 py-3">{row.channel || "-"}</td>
-                        <td className="px-2 py-3">{formatPropertyLabel(row.propertyId || "-")}</td>
+                        <td className="px-2 py-3">{formatPropertyLabel(row.property || row.propertyId || "-")}</td>
                         <td className="px-2 py-3 break-words">{formatBasicOfferDetails(resolvedBasic)}</td>
                         <td className="px-2 py-3">
-                          {row.createdEventOutboxState ? (
-                            <Badge variant={getOutboxBadgeVariant(row.createdEventOutboxState)}>{row.createdEventOutboxState}</Badge>
+                          {createdOutboxState ? (
+                            <Badge variant={getOutboxBadgeVariant(createdOutboxState)}>{createdOutboxState}</Badge>
                           ) : (
                             "-"
                           )}
                         </td>
-                        <td className="px-2 py-3">{resolvedPrimary.name}</td>
+                        <td className="px-2 py-3">{primaryName || "-"}</td>
                         <td className="px-2 py-3">
-                          {formatPrimaryOfferTotal(resolvedPrimary.totalPrice)}
+                          {formatPrimaryOfferTotal(primaryTotal)}
                         </td>
                       </tr>
                       );
@@ -560,180 +930,46 @@ export function OffersLogsDashboard() {
                   <p className="text-sm text-destructive">{(detailQuery.error as Error)?.message ?? "Failed to load detail."}</p>
                 ) : (
                   <div className="space-y-5 pb-8">
-                    <section className="rounded-md border p-3">
-                      <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">Summary</h3>
-                      <div className="grid gap-2 text-sm md:grid-cols-3">
-                        <p><span className="font-medium">Decision:</span> {detailQuery.data.decision.decisionId}</p>
-                        <p><span className="font-medium">Status:</span> {detailQuery.data.decision.decisionStatus}</p>
-                        <p><span className="font-medium">Channel:</span> {detailQuery.data.decision.channel || "-"}</p>
-                        <p><span className="font-medium">Recorded:</span> {formatDateTime(detailQuery.data.decision.eventRecordedAt)}</p>
-                        <p><span className="font-medium">Served/HTTP:</span> {detailQuery.data.decision.served ? "served" : "not served"} / {detailQuery.data.decision.httpStatus ?? "-"}</p>
-                        <p><span className="font-medium">Latency:</span> {formatDuration(detailQuery.data.decision.latencyMs)}</p>
-                      </div>
-                    </section>
-
-                    <section>
-                      <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">Presented Offers</h3>
-                      {detailQuery.data.normalized.presentedOffers.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">No presented offers.</p>
-                      ) : (
-                        <div className="overflow-x-auto rounded-md border">
-                          <table className="w-full text-sm">
-                            <thead className="text-xs uppercase tracking-wide text-muted-foreground">
-                              <tr className="border-b">
-                                <th className="px-2 py-2">Offer</th>
-                                <th className="px-2 py-2">Type</th>
-                                <th className="px-2 py-2">Room</th>
-                                <th className="px-2 py-2">Rate</th>
-                                <th className="px-2 py-2">Total</th>
-                                <th className="px-2 py-2">Basis</th>
-                                <th className="px-2 py-2">Cancellation</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {detailQuery.data.normalized.presentedOffers.map((offer, index) => (
-                                <tr key={`${offer.offerId}-${index}`} className="border-b align-top">
-                                  <td className="px-2 py-2">{offer.offerId}</td>
-                                  <td className="px-2 py-2">{offer.type ?? "-"}</td>
-                                  <td className="px-2 py-2">{offer.roomTypeName ?? offer.roomTypeId ?? "-"}</td>
-                                  <td className="px-2 py-2">{offer.ratePlanName ?? offer.ratePlanId ?? "-"}</td>
-                                  <td className="px-2 py-2">{formatCurrency(offer.totalPrice)}</td>
-                                  <td className="px-2 py-2">{offer.basis ?? "-"}</td>
-                                  <td className="px-2 py-2">{offer.cancellationSummary ?? offer.policySummary ?? "-"}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                    {parsedDetailResponse ? (
+                      <>
+                        <div id="selection" className="scroll-mt-24">
+                          <DecisionSummary
+                            primaryOffer={primaryOffer}
+                            secondaryOffer={secondaryOffer}
+                            deltaLine={deltaLine}
+                          />
                         </div>
-                      )}
-                    </section>
 
-                    <section>
-                      <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">Why</h3>
-                      <div className="mb-2 flex flex-wrap gap-1">
-                        {detailQuery.data.normalized.globalReasonCodes.map((code) => (
-                          <Badge key={code} variant="secondary">{code}</Badge>
-                        ))}
-                      </div>
-                      {detailQuery.data.normalized.selectionSummary ? (
-                        <p className="mb-2 text-sm">{detailQuery.data.normalized.selectionSummary}</p>
-                      ) : null}
-                      <div className="space-y-2">
-                        {detailQuery.data.normalized.presentedOffers.map((offer, index) => {
-                          const reasons = detailQuery.data.normalized.reasonsByOfferId?.[offer.offerId] ?? [];
-                          return (
-                            <div key={`why-${offer.offerId}-${index}`} className="rounded-md border p-2 text-sm">
-                              <p className="font-medium">{offer.offerId}</p>
-                              {reasons.length > 0 ? (
-                                <div className="mt-1 flex flex-wrap gap-1">
-                                  {reasons.map((reason) => (
-                                    <Badge key={`${offer.offerId}-${reason}`} variant="outline">{reason}</Badge>
-                                  ))}
-                                </div>
-                              ) : (
-                                <p className="mt-1 text-xs text-muted-foreground">No offer-specific reasons.</p>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </section>
-
-                    <section>
-                      <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">Top Candidates (max 10)</h3>
-                      {(detailQuery.data.normalized.topCandidates ?? []).length === 0 ? (
-                        <p className="text-sm text-muted-foreground">No candidate table available.</p>
-                      ) : (
-                        <div className="overflow-x-auto rounded-md border">
-                          <table className="w-full text-sm">
-                            <thead className="text-xs uppercase tracking-wide text-muted-foreground">
-                              <tr className="border-b">
-                                <th className="px-2 py-2">Rank</th>
-                                <th className="px-2 py-2">Offer</th>
-                                <th className="px-2 py-2">Room</th>
-                                <th className="px-2 py-2">Rate</th>
-                                <th className="px-2 py-2">Score</th>
-                                <th className="px-2 py-2">Total</th>
-                                <th className="px-2 py-2">Flags</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {detailQuery.data.normalized.topCandidates?.slice(0, 10).map((candidate, index) => {
-                                const isPresented = detailQuery.data.normalized.presentedOffers.some((offer) =>
-                                  matchesOffer(candidate, offer),
-                                );
-
-                                return (
-                                  <tr key={`${candidate.offerId ?? "candidate"}-${index}`} className={cn("border-b align-top", isPresented ? "bg-primary/5" : "")}>
-                                    <td className="px-2 py-2">{candidate.rank ?? index + 1}</td>
-                                    <td className="px-2 py-2">{candidate.offerId ?? "-"}</td>
-                                    <td className="px-2 py-2">{candidate.roomTypeId ?? "-"}</td>
-                                    <td className="px-2 py-2">{candidate.ratePlanId ?? "-"}</td>
-                                    <td className="px-2 py-2">{candidate.score ?? "-"}</td>
-                                    <td className="px-2 py-2">{formatCurrency(candidate.totalPrice)}</td>
-                                    <td className="px-2 py-2">{isPresented ? <Badge>Presented</Badge> : "-"}</td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
+                        <div id="profile" className="scroll-mt-24">
+                          <GuestProfile
+                            scoringWeights={scoringWeights}
+                            profileFinal={profileFinal}
+                            profilePreAri={profilePreAri}
+                          />
                         </div>
-                      )}
-                    </section>
 
-                    <details open={shouldExpandTimeline} className="rounded-md border p-3">
-                      <summary className="cursor-pointer text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                        Timeline
-                      </summary>
-                      <div className="mt-3 space-y-2">
-                        {detailQuery.data.events.map((event) => (
-                          <div key={event.eventId} className="rounded-md border p-2 text-sm">
-                            <div className="mb-1 flex flex-wrap items-center gap-2">
-                              <Badge variant="outline">{event.eventType}</Badge>
-                              {event.outbox ? (
-                                <Badge variant={getOutboxBadgeVariant(event.outbox.state)}>{event.outbox.state}</Badge>
-                              ) : null}
-                            </div>
-                            <div className="grid gap-1 md:grid-cols-2">
-                              <p><span className="font-medium">Recorded:</span> {formatDateTime(event.eventRecordedAt)}</p>
-                              <p><span className="font-medium">Engine:</span> {event.engineVersion}</p>
-                              <p><span className="font-medium">Config:</span> {event.configVersion}</p>
-                              <p><span className="font-medium">Attempts:</span> {event.outbox?.attempts ?? "-"}</p>
-                            </div>
-                            {event.errorSafeMessage ? (
-                              <p className="mt-1 text-xs text-muted-foreground">{event.errorCode}: {event.errorSafeMessage}</p>
-                            ) : null}
-                            {event.outbox?.lastErrorSafeMessage ? (
-                              <p className="mt-1 text-xs text-muted-foreground">Outbox: {event.outbox.lastErrorSafeMessage}</p>
-                            ) : null}
-                          </div>
-                        ))}
-                      </div>
-                    </details>
+                        <div id="funnel" className="scroll-mt-24">
+                          <CandidateAnalysis
+                            displayedCandidates={allCandidates}
+                            scoringWeights={scoringWeights}
+                            expandedCandidate={expandedCandidate}
+                            setExpandedCandidate={setExpandedCandidate}
+                            parsedResponse={parsedDetailResponse}
+                          />
+                        </div>
 
-                    <details className="rounded-md border p-3">
-                      <summary className="cursor-pointer text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                        Raw JSON
-                      </summary>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => copyToClipboard(detailQuery.data.normalized.resolvedRequest)}
-                        >
-                          Copy request payload
-                        </Button>
-                      </div>
-                      <details className="mt-3 rounded-md border p-2">
-                        <summary className="cursor-pointer text-xs font-medium">Core payload</summary>
-                        <pre className="mt-2 overflow-auto text-xs">{JSON.stringify(detailQuery.data.normalized.rawCorePayload ?? {}, null, 2)}</pre>
-                      </details>
-                      <details className="mt-2 rounded-md border p-2">
-                        <summary className="cursor-pointer text-xs font-medium">Debug payload</summary>
-                        <pre className="mt-2 overflow-auto text-xs">{JSON.stringify(detailQuery.data.normalized.rawDebugPayload ?? {}, null, 2)}</pre>
-                      </details>
-                    </details>
+                        <div id="debug" className="scroll-mt-24">
+                          <DebugPanel
+                            parsedResponse={parsedDetailResponse}
+                            requestPayload={requestPayload}
+                            rawResponse={parsedDetailResponse.raw}
+                            allCandidates={allCandidates}
+                            effectiveConfigRows={effectiveConfigRows}
+                            reasonGroups={reasonGroups}
+                          />
+                        </div>
+                      </>
+                    ) : null}
                   </div>
                 )}
               </ScrollArea>
