@@ -547,6 +547,13 @@ function toStringArray(value: unknown): string[] {
     .filter(Boolean);
 }
 
+function parseAuditOutboxState(value: unknown): AuditOutboxState | null {
+  if (value === "PENDING" || value === "ENQUEUED" || value === "PROCESSED" || value === "DLQ") {
+    return value;
+  }
+  return null;
+}
+
 function looksGenericOfferName(value: string): boolean {
   return /^offer\s*\d+$/i.test(value.trim());
 }
@@ -1040,13 +1047,7 @@ function normalizeOffersLogsListRow(rawRow: unknown): OffersLogsListRow {
     row.created_event_outbox_state,
   );
 
-  const parsedOutboxState =
-    createdOutboxStateRaw === "PENDING" ||
-    createdOutboxStateRaw === "ENQUEUED" ||
-    createdOutboxStateRaw === "PROCESSED" ||
-    createdOutboxStateRaw === "DLQ"
-      ? createdOutboxStateRaw
-      : null;
+  const parsedOutboxState = parseAuditOutboxState(createdOutboxStateRaw);
 
   return {
     decisionId: firstString(row.decisionId, row.decision_id) ?? "",
@@ -1066,13 +1067,7 @@ function normalizeOffersLogsListRow(rawRow: unknown): OffersLogsListRow {
     children: firstNumber(row.children),
     createdOutbox: createdOutbox
       ? {
-          state:
-            firstString(createdOutbox.state) === "PENDING" ||
-            firstString(createdOutbox.state) === "ENQUEUED" ||
-            firstString(createdOutbox.state) === "PROCESSED" ||
-            firstString(createdOutbox.state) === "DLQ"
-              ? (firstString(createdOutbox.state) as AuditOutboxState)
-              : "PENDING",
+          state: parseAuditOutboxState(firstString(createdOutbox.state)) ?? "PENDING",
           attempts: firstNumber(createdOutbox.attempts),
           lastErrorSafeMessage: firstString(
             createdOutbox.lastErrorSafeMessage,

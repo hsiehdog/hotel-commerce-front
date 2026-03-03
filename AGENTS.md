@@ -92,6 +92,7 @@ Prefer small PR-sized changes over massive rewrites.
 
 After any code change, run:
 
+- `pnpm lint`
 - `npx tsc --noEmit`
   Fix all TS errors before finishing.
 

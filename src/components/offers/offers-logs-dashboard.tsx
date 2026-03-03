@@ -2,7 +2,7 @@
 
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   OffersLogsDetailResponse,
   AuditOutboxState,
@@ -686,8 +686,6 @@ export function OffersLogsDashboard() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [expandedCandidate, setExpandedCandidate] = useState<string | null>(null);
 
-  const hasMountedRef = useRef(false);
-
   const propertiesQuery = useQuery({
     queryKey: ["offer-log-properties"],
     queryFn: () => fetchProperties({ activeOnly: true }),
@@ -724,16 +722,6 @@ export function OffersLogsDashboard() {
     queryFn: () => fetchOffersLogDetail(selectedDecisionId, { includeRawPayloads: true, payloadCapKb: 512 }),
     enabled: Boolean(selectedDecisionId),
   });
-
-  useEffect(() => {
-    if (!hasMountedRef.current) {
-      hasMountedRef.current = true;
-      return;
-    }
-
-    setSelectedDecisionId("");
-    setIsDrawerOpen(false);
-  }, [propertyId]);
 
   useEffect(() => {
     const params = new URLSearchParams();
@@ -788,7 +776,12 @@ export function OffersLogsDashboard() {
               <select
                 id="propertyId"
                 value={propertyId}
-                onChange={(event) => setPropertyId(event.target.value)}
+                onChange={(event) => {
+                  setPropertyId(event.target.value);
+                  setSelectedDecisionId("");
+                  setIsDrawerOpen(false);
+                  setExpandedCandidate(null);
+                }}
                 className="block h-9 min-w-[260px] rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
               >
                 {propertyOptions.map((property) => (

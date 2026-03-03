@@ -1,7 +1,6 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import { ParsedOfferCard } from "@/lib/offers-demo";
 import { DecisionOfferCard } from "./offer-card";
 
