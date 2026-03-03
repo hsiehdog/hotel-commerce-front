@@ -140,6 +140,11 @@ export type OffersLogsListRow = {
   tenantId?: string;
   eventRecordedAt: string;
   channel: string;
+  checkIn?: string | null;
+  checkOut?: string | null;
+  rooms?: number | null;
+  adults?: number | null;
+  children?: number | null;
   decisionStatus: OffersLogDecisionStatus;
   offersCount: number;
   truncated: boolean;
@@ -951,7 +956,8 @@ export async function fetchOffersLogs(
     };
   }
 
-  return request<OffersLogsListResponse>(`/offers/logs${query}`, "GET");
+  const response = await request<unknown>(`/offers/logs${query}`, "GET");
+  return normalizeOffersLogsListResponse(response);
 }
 
 export async function fetchOffersLogDetail(
@@ -972,6 +978,130 @@ export async function fetchOffersLogDetail(
     `/offers/logs/${encodeURIComponent(decisionId)}${query}`,
     "GET",
   );
+}
+
+function normalizeOffersLogsListResponse(payload: unknown): OffersLogsListResponse {
+  const response = isRecord(payload) ? payload : {};
+  const pageInfoSource = isRecord(response.pageInfo)
+    ? response.pageInfo
+    : isRecord(response.page_info)
+      ? response.page_info
+      : {};
+  const rowsSource = Array.isArray(response.rows)
+    ? response.rows
+    : Array.isArray(response.data)
+      ? response.data
+      : [];
+
+  return {
+    serverNow: firstString(response.serverNow, response.server_now) ?? new Date().toISOString(),
+    pageInfo: {
+      hasMore: Boolean(pageInfoSource.hasMore ?? pageInfoSource.has_more),
+      nextCursor: firstString(pageInfoSource.nextCursor, pageInfoSource.next_cursor),
+      limit:
+        firstNumber(pageInfoSource.limit) ??
+        (Array.isArray(rowsSource) ? rowsSource.length : 25),
+    },
+    rows: rowsSource.map(normalizeOffersLogsListRow),
+  };
+}
+
+function normalizeOffersLogsListRow(rawRow: unknown): OffersLogsListRow {
+  const row = isRecord(rawRow) ? rawRow : {};
+  const reasonCodes = toStringArray(
+    Array.isArray(row.reasonCodes) ? row.reasonCodes : row.reason_codes,
+  );
+  const decisionStatus = firstString(row.decisionStatus, row.decision_status);
+  const createdOutboxStateRaw = firstString(
+    row.createdEventOutboxState,
+    row.created_event_outbox_state,
+  );
+
+  const parsedOutboxState =
+    createdOutboxStateRaw === "PENDING" ||
+    createdOutboxStateRaw === "ENQUEUED" ||
+    createdOutboxStateRaw === "PROCESSED" ||
+    createdOutboxStateRaw === "DLQ"
+      ? createdOutboxStateRaw
+      : null;
+
+  return {
+    decisionId: firstString(row.decisionId, row.decision_id) ?? "",
+    requestId: firstString(row.requestId, row.request_id) ?? "",
+    propertyId: firstString(row.propertyId, row.property_id) ?? "",
+    tenantId: firstString(row.tenantId, row.tenant_id),
+    eventRecordedAt:
+      firstString(row.eventRecordedAt, row.event_recorded_at, row.createdAt, row.created_at) ??
+      new Date().toISOString(),
+    channel: firstString(row.channel) ?? "-",
+    checkIn: firstString(row.checkIn, row.check_in),
+    checkOut: firstString(row.checkOut, row.check_out),
+    rooms: firstNumber(row.rooms),
+    adults: firstNumber(row.adults),
+    children: firstNumber(row.children),
+    decisionStatus:
+      decisionStatus === "OK" ||
+      decisionStatus === "NO_OFFERS" ||
+      decisionStatus === "FALLBACK_ONLY" ||
+      decisionStatus === "ERROR"
+        ? decisionStatus
+        : "ERROR",
+    offersCount: firstNumber(row.offersCount, row.offers_count) ?? 0,
+    truncated: Boolean(row.truncated),
+    primaryOfferType: firstString(row.primaryOfferType, row.primary_offer_type),
+    primaryOfferRoomTypeName: firstString(
+      row.primaryOfferRoomTypeName,
+      row.primary_offer_room_type_name,
+      row.primaryOfferName,
+      row.primary_offer_name,
+      row.primaryRoomTypeName,
+      row.primary_room_type_name,
+    ),
+    primaryOfferRatePlanName: firstString(
+      row.primaryOfferRatePlanName,
+      row.primary_offer_rate_plan_name,
+      row.primaryRatePlanName,
+      row.primary_rate_plan_name,
+    ),
+    primaryOfferTotalPrice: firstNumber(
+      row.primaryOfferTotalPrice,
+      row.primary_offer_total_price,
+      row.primaryTotal,
+      row.primary_total,
+      row.primaryOfferTotal,
+      row.primary_offer_total,
+    ),
+    primaryOfferCurrency: firstString(
+      row.primaryOfferCurrency,
+      row.primary_offer_currency,
+      row.primaryTotalCurrency,
+      row.primary_total_currency,
+      row.currency,
+    ),
+    primaryOfferRefundability: (() => {
+      const raw = row.primaryOfferRefundability ?? row.primary_offer_refundability;
+      return typeof raw === "string" || typeof raw === "boolean" ? raw : null;
+    })(),
+    fallbackActionType: firstString(row.fallbackActionType, row.fallback_action_type),
+    httpStatus: firstNumber(row.httpStatus, row.http_status),
+    servedAttemptedAt: firstString(row.servedAttemptedAt, row.served_attempted_at),
+    servedFinishedAt: firstString(row.servedFinishedAt, row.served_finished_at),
+    served: Boolean(row.served),
+    servedSuccess: Boolean(row.servedSuccess ?? row.served_success),
+    createdEventId: firstString(row.createdEventId, row.created_event_id),
+    createdEventRecordedAt: firstString(row.createdEventRecordedAt, row.created_event_recorded_at),
+    createdEventOutboxState: parsedOutboxState,
+    createdEventOutboxAttempts: firstNumber(row.createdEventOutboxAttempts, row.created_event_outbox_attempts),
+    createdEventLastErrorSafeMessage: firstString(
+      row.createdEventLastErrorSafeMessage,
+      row.created_event_last_error_safe_message,
+    ),
+    reasonCodes,
+    reasonCodesCount: firstNumber(row.reasonCodesCount, row.reason_codes_count) ?? reasonCodes.length,
+    reasonCodesTruncated: Boolean(row.reasonCodesTruncated ?? row.reason_codes_truncated),
+    latencyMs: firstNumber(row.latencyMs, row.latency_ms) ?? 0,
+    decisionAgeMs: firstNumber(row.decisionAgeMs, row.decision_age_ms) ?? 0,
+  };
 }
 
 export async function updateUserProfile(

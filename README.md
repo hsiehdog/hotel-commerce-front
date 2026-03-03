@@ -86,20 +86,21 @@ Use this route to inspect historical offer decisions in a table-first ops log.
 3. Set `NEXT_PUBLIC_API_BASE_URL` so frontend can call those endpoints.
 4. Open `http://localhost:3000/demo/offers/logs`.
 5. Select a property from the dropdown (auto-selects first active property when available).
-6. Select a time preset (`24h`, `7d`, `30d`).
-7. Use the log table for operational scan with columns:
-   - `recordedAt`
+6. Use the log table for operational scan with columns:
+   - `recorded at` (no seconds)
    - `channel`
-   - `status`
-   - `served/http`
-   - `created outbox state`
-   - `offersCount`
-   - `primary offer summary` (`type + room + rate`)
-   - `primary total price`
-   - `refundability`
-   - `top 2–3 reason codes`
-   - `latency`
-8. Click a row to open the detail drawer:
+   - `property`
+   - `basic offer details` (`check-in/check-out`, `rooms`, `adults/children`)
+   - `created outbox`
+   - `primary offer name` (`room - rate`)
+   - `total`
+7. Date range formatting in `basic offer details` is deterministic:
+   - same day: `Mon D, YYYY`
+   - same month + year: `Mon D-D, YYYY`
+   - same year: `Mon D - Mon D, YYYY`
+   - different year: `Mon D, YYYY - Mon D, YYYY`
+8. Primary offer name and total in the list are enriched from decision detail (`GET /offers/logs/:decisionId`) when list rows do not include those fields.
+9. Click a row to open the detail drawer:
    - summary strip
    - presented offers table
    - why section (`global + per-offer`)
@@ -111,7 +112,10 @@ Use this route to inspect historical offer decisions in a table-first ops log.
 
 - `GET /offers/logs` should enforce max 30-day range and support cursor pagination.
 - List rows should include computed fields like `served`, `servedSuccess`, `latencyMs`, and `decisionAgeMs`.
-- List rows should include primary-offer summary fields used by the ops table (`primaryOfferType`, room/rate display fields, total/currency, refundability).
+- List rows should include primary-offer and stay-summary fields used by the ops table when available:
+  - `primaryOfferRoomTypeName`, `primaryOfferRatePlanName`, `primaryOfferTotalPrice`
+  - `checkIn`, `checkOut`, `rooms`, `adults`, `children`
+  - snake_case variants are also normalized by the frontend client
 - `GET /offers/logs/:decisionId` should return normalized created-event sections plus integrity flags and normalization warnings.
 - `includeRawPayloads` and optional payload cap handling are supported for detail retrieval.
 

@@ -1,11 +1,10 @@
 "use client";
 
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueries, useQuery } from "@tanstack/react-query";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AuditOutboxState,
-  OffersLogDecisionStatus,
   OffersLogPresentedOffer,
   OffersLogTopCandidate,
   fetchOffersLogDetail,
@@ -34,22 +33,36 @@ function formatDateTime(value?: string | null): string {
   return parsed.toLocaleString();
 }
 
-function formatCurrency(amount?: number | null, currency?: string | null): string {
+function formatDateTimeWithoutSeconds(value?: string | null): string {
+  if (!value) {
+    return "-";
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+  return parsed.toLocaleString(undefined, {
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function formatCurrency(amount?: number | null): string {
   if (amount === null || amount === undefined) {
     return "-";
   }
-  if (!currency) {
-    return String(amount);
-  }
 
   try {
-    return new Intl.NumberFormat(undefined, {
+    return new Intl.NumberFormat("en-US", {
       style: "currency",
-      currency,
+      currency: "USD",
       maximumFractionDigits: 2,
     }).format(amount);
   } catch {
-    return `${amount} ${currency}`;
+    return `$${amount.toFixed(2)}`;
   }
 }
 
@@ -79,16 +92,6 @@ function getOutboxBadgeVariant(state?: AuditOutboxState | null): "outline" | "se
   return "outline";
 }
 
-function getStatusBadgeVariant(status: OffersLogDecisionStatus): "secondary" | "destructive" | "outline" {
-  if (status === "ERROR") {
-    return "destructive";
-  }
-  if (status === "OK") {
-    return "secondary";
-  }
-  return "outline";
-}
-
 function matchesOffer(candidate: OffersLogTopCandidate, offer: OffersLogPresentedOffer): boolean {
   if (candidate.offerId && offer.offerId && candidate.offerId === offer.offerId) {
     return true;
@@ -113,28 +116,24 @@ function copyToClipboard(value: unknown) {
   void navigator.clipboard.writeText(payload);
 }
 
-function getPrimarySummaryFromRow(row: {
-  primaryOfferType?: string | null;
+function getPrimaryOfferNameFromRow(row: {
   primaryOfferRoomTypeName?: string | null;
   primaryOfferRatePlanName?: string | null;
 }) {
   const parts = [
-    row.primaryOfferType,
     row.primaryOfferRoomTypeName,
     row.primaryOfferRatePlanName,
   ].filter(Boolean);
 
-  return parts.length > 0 ? parts.join(" • ") : "-";
+  return parts.length > 0 ? parts.join(" - ") : "-";
 }
 
-function getRefundabilityLabel(refundability?: string | boolean | null): string {
-  if (typeof refundability === "string") {
-    return refundability;
+function formatPrimaryOfferTotal(amount?: number | null): string {
+  if (amount === null || amount === undefined) {
+    return "-";
   }
-  if (typeof refundability === "boolean") {
-    return refundability ? "Refundable" : "Non-refundable";
-  }
-  return "-";
+
+  return formatCurrency(amount);
 }
 
 function formatPropertyLabel(label: string): string {
@@ -145,6 +144,113 @@ function formatPropertyLabel(label: string): string {
     .filter(Boolean)
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
+}
+
+type PrimaryOfferDisplay = {
+  name: string;
+  totalPrice?: number | null;
+  currency?: string | null;
+};
+
+type BasicOfferDetails = {
+  checkIn?: string | null;
+  checkOut?: string | null;
+  rooms?: number | null;
+  adults?: number | null;
+  children?: number | null;
+};
+
+type RowEnrichment = {
+  primary: PrimaryOfferDisplay;
+  basic: BasicOfferDetails;
+};
+
+function formatMonthDayYear(date: Date): string {
+  const month = new Intl.DateTimeFormat("en-US", { month: "short" }).format(date);
+  return `${month} ${date.getDate()}, ${date.getFullYear()}`;
+}
+
+function formatStayDateRange(checkIn?: string | null, checkOut?: string | null): string {
+  if (!checkIn || !checkOut) {
+    return "-";
+  }
+
+  const start = new Date(checkIn);
+  const end = new Date(checkOut);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return "-";
+  }
+
+  const sameYear = start.getFullYear() === end.getFullYear();
+  const sameMonth = sameYear && start.getMonth() === end.getMonth();
+  const sameDay = sameMonth && start.getDate() === end.getDate();
+  const startMonth = new Intl.DateTimeFormat("en-US", { month: "short" }).format(start);
+  const endMonth = new Intl.DateTimeFormat("en-US", { month: "short" }).format(end);
+
+  if (sameDay) {
+    return formatMonthDayYear(start);
+  }
+
+  if (sameMonth) {
+    return `${startMonth} ${start.getDate()}-${end.getDate()}, ${start.getFullYear()}`;
+  }
+
+  if (sameYear) {
+    return `${startMonth} ${start.getDate()} - ${endMonth} ${end.getDate()}, ${start.getFullYear()}`;
+  }
+
+  return `${formatMonthDayYear(start)} - ${formatMonthDayYear(end)}`;
+}
+
+function formatBasicOfferDetails(details: BasicOfferDetails): string {
+  const dateRange = formatStayDateRange(details.checkIn, details.checkOut);
+  const rooms = details.rooms ?? 0;
+  const adults = details.adults ?? 0;
+  const children = details.children ?? 0;
+  return `${dateRange} | ${rooms} room${rooms === 1 ? "" : "s"} | ${adults}A/${children}C`;
+}
+
+function getPrimaryOfferFromPresentedOffers(
+  detail: Awaited<ReturnType<typeof fetchOffersLogDetail>>,
+): PrimaryOfferDisplay | null {
+  const presentedOffers = detail.normalized.presentedOffers;
+  if (presentedOffers.length === 0) {
+    return null;
+  }
+
+  const recommendedOffer = presentedOffers.find((offer) => offer.recommended);
+  const primaryOffer = recommendedOffer ?? presentedOffers[0];
+  const nameParts = [primaryOffer.roomTypeName, primaryOffer.ratePlanName].filter(Boolean);
+  const name = nameParts.length > 0
+    ? nameParts.join(" - ")
+    : primaryOffer.offerId || "-";
+
+  return {
+    name,
+    totalPrice: primaryOffer.totalPrice,
+    currency: primaryOffer.currency,
+  };
+}
+
+function resolvePrimaryValues(
+  row: {
+    primaryOfferRoomTypeName?: string | null;
+    primaryOfferRatePlanName?: string | null;
+    primaryOfferTotalPrice?: number | null;
+    primaryOfferCurrency?: string | null;
+  },
+  fallbackPrimary?: PrimaryOfferDisplay,
+) {
+  const primaryName = getPrimaryOfferNameFromRow(row);
+  return {
+    name: primaryName === "-" ? (fallbackPrimary?.name ?? "-") : primaryName,
+    totalPrice: row.primaryOfferTotalPrice ?? fallbackPrimary?.totalPrice ?? null,
+    currency: row.primaryOfferCurrency ?? fallbackPrimary?.currency ?? null,
+  };
+}
+
+function hasMissingBasicDetails(details: BasicOfferDetails): boolean {
+  return !details.checkIn || !details.checkOut || details.rooms === null || details.rooms === undefined;
 }
 
 export function OffersLogsDashboard() {
@@ -190,6 +296,67 @@ export function OffersLogsDashboard() {
     () => listQuery.data?.pages.flatMap((page) => page.rows) ?? [],
     [listQuery.data?.pages],
   );
+
+  const rowsNeedingDetailEnrichment = useMemo(
+    () =>
+      rows.filter((row) => {
+        const missingName = !row.primaryOfferRoomTypeName && !row.primaryOfferRatePlanName;
+        const missingTotal = row.primaryOfferTotalPrice === null || row.primaryOfferTotalPrice === undefined;
+        const missingBasic = hasMissingBasicDetails({
+          checkIn: row.checkIn,
+          checkOut: row.checkOut,
+          rooms: row.rooms,
+          adults: row.adults,
+          children: row.children,
+        });
+        return missingName || missingTotal || missingBasic;
+      }),
+    [rows],
+  );
+
+  const rowDetailQueries = useQueries({
+    queries: rowsNeedingDetailEnrichment.map((row) => ({
+      queryKey: ["offer-log-row-primary", row.decisionId],
+      queryFn: () => fetchOffersLogDetail(row.decisionId, { includeRawPayloads: false }),
+      staleTime: 60_000,
+      enabled: Boolean(row.decisionId),
+    })),
+  });
+
+  const fallbackRowDataByDecisionId = useMemo(() => {
+    const map = new Map<string, RowEnrichment>();
+    rowsNeedingDetailEnrichment.forEach((row, index) => {
+      const detail = rowDetailQueries[index]?.data;
+      if (!detail) {
+        return;
+      }
+      const primary = getPrimaryOfferFromPresentedOffers(detail);
+      if (primary) {
+        map.set(row.decisionId, {
+          primary,
+          basic: {
+            checkIn: detail.decision.checkIn,
+            checkOut: detail.decision.checkOut,
+            rooms: detail.decision.rooms,
+            adults: detail.decision.adults,
+            children: detail.decision.children,
+          },
+        });
+      } else {
+        map.set(row.decisionId, {
+          primary: { name: "-", totalPrice: null, currency: null },
+          basic: {
+            checkIn: detail.decision.checkIn,
+            checkOut: detail.decision.checkOut,
+            rooms: detail.decision.rooms,
+            adults: detail.decision.adults,
+            children: detail.decision.children,
+          },
+        });
+      }
+    });
+    return map;
+  }, [rowDetailQueries, rowsNeedingDetailEnrichment]);
 
   const detailQuery = useQuery({
     queryKey: ["offer-log-detail", selectedDecisionId],
@@ -288,25 +455,40 @@ export function OffersLogsDashboard() {
             <p className="text-sm text-muted-foreground">No rows for current property/time window.</p>
           ) : (
             <>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[1200px] text-left text-sm">
+              <div className="overflow-x-hidden">
+                <table className="w-full table-fixed text-left text-sm">
+                  <colgroup>
+                    <col className="w-[14%]" />
+                    <col className="w-[8%]" />
+                    <col className="w-[14%]" />
+                    <col className="w-[22%]" />
+                    <col className="w-[14%]" />
+                    <col className="w-[14%]" />
+                    <col className="w-[14%]" />
+                  </colgroup>
                   <thead className="text-xs uppercase tracking-wide text-muted-foreground">
                     <tr className="border-b">
                       <th className="px-2 py-2">Recorded At</th>
                       <th className="px-2 py-2">Channel</th>
-                      <th className="px-2 py-2">Status</th>
-                      <th className="px-2 py-2">Served / HTTP</th>
+                      <th className="px-2 py-2">Property</th>
+                      <th className="px-2 py-2">Basic Offer Details</th>
                       <th className="px-2 py-2">Created Outbox</th>
-                      <th className="px-2 py-2">Offers</th>
-                      <th className="px-2 py-2">Primary Summary</th>
-                      <th className="px-2 py-2">Primary Total</th>
-                      <th className="px-2 py-2">Refundability</th>
-                      <th className="px-2 py-2">Top Reasons</th>
-                      <th className="px-2 py-2">Latency</th>
+                      <th className="px-2 py-2">Primary Offer Name</th>
+                      <th className="px-2 py-2">Total</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map((row) => (
+                    {rows.map((row) => {
+                      const fallbackRowData = fallbackRowDataByDecisionId.get(row.decisionId);
+                      const resolvedPrimary = resolvePrimaryValues(row, fallbackRowData?.primary);
+                      const resolvedBasic: BasicOfferDetails = {
+                        checkIn: row.checkIn ?? fallbackRowData?.basic.checkIn,
+                        checkOut: row.checkOut ?? fallbackRowData?.basic.checkOut,
+                        rooms: row.rooms ?? fallbackRowData?.basic.rooms ?? null,
+                        adults: row.adults ?? fallbackRowData?.basic.adults ?? null,
+                        children: row.children ?? fallbackRowData?.basic.children ?? null,
+                      };
+                      return (
                       <tr
                         key={row.decisionId}
                         className={cn(
@@ -315,14 +497,10 @@ export function OffersLogsDashboard() {
                         )}
                         onClick={() => openDetail(row.decisionId)}
                       >
-                        <td className="px-2 py-3">{formatDateTime(row.eventRecordedAt)}</td>
+                        <td className="px-2 py-3">{formatDateTimeWithoutSeconds(row.eventRecordedAt)}</td>
                         <td className="px-2 py-3">{row.channel || "-"}</td>
-                        <td className="px-2 py-3">
-                          <Badge variant={getStatusBadgeVariant(row.decisionStatus)}>{row.decisionStatus}</Badge>
-                        </td>
-                        <td className="px-2 py-3">
-                          {row.served ? "served" : "not served"} / {row.httpStatus ?? "-"}
-                        </td>
+                        <td className="px-2 py-3">{formatPropertyLabel(row.propertyId || "-")}</td>
+                        <td className="px-2 py-3 break-words">{formatBasicOfferDetails(resolvedBasic)}</td>
                         <td className="px-2 py-3">
                           {row.createdEventOutboxState ? (
                             <Badge variant={getOutboxBadgeVariant(row.createdEventOutboxState)}>{row.createdEventOutboxState}</Badge>
@@ -330,22 +508,13 @@ export function OffersLogsDashboard() {
                             "-"
                           )}
                         </td>
-                        <td className="px-2 py-3">{row.offersCount}</td>
-                        <td className="px-2 py-3">{getPrimarySummaryFromRow(row)}</td>
+                        <td className="px-2 py-3">{resolvedPrimary.name}</td>
                         <td className="px-2 py-3">
-                          {formatCurrency(row.primaryOfferTotalPrice, row.primaryOfferCurrency)}
+                          {formatPrimaryOfferTotal(resolvedPrimary.totalPrice)}
                         </td>
-                        <td className="px-2 py-3">{getRefundabilityLabel(row.primaryOfferRefundability)}</td>
-                        <td className="px-2 py-3">
-                          <div className="flex flex-wrap gap-1">
-                            {row.reasonCodes.slice(0, 3).map((code) => (
-                              <Badge key={`${row.decisionId}-${code}`} variant="outline">{code}</Badge>
-                            ))}
-                          </div>
-                        </td>
-                        <td className="px-2 py-3">{formatDuration(row.latencyMs)}</td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -428,7 +597,7 @@ export function OffersLogsDashboard() {
                                   <td className="px-2 py-2">{offer.type ?? "-"}</td>
                                   <td className="px-2 py-2">{offer.roomTypeName ?? offer.roomTypeId ?? "-"}</td>
                                   <td className="px-2 py-2">{offer.ratePlanName ?? offer.ratePlanId ?? "-"}</td>
-                                  <td className="px-2 py-2">{formatCurrency(offer.totalPrice, offer.currency)}</td>
+                                  <td className="px-2 py-2">{formatCurrency(offer.totalPrice)}</td>
                                   <td className="px-2 py-2">{offer.basis ?? "-"}</td>
                                   <td className="px-2 py-2">{offer.cancellationSummary ?? offer.policySummary ?? "-"}</td>
                                 </tr>
@@ -501,7 +670,7 @@ export function OffersLogsDashboard() {
                                     <td className="px-2 py-2">{candidate.roomTypeId ?? "-"}</td>
                                     <td className="px-2 py-2">{candidate.ratePlanId ?? "-"}</td>
                                     <td className="px-2 py-2">{candidate.score ?? "-"}</td>
-                                    <td className="px-2 py-2">{formatCurrency(candidate.totalPrice, candidate.currency)}</td>
+                                    <td className="px-2 py-2">{formatCurrency(candidate.totalPrice)}</td>
                                     <td className="px-2 py-2">{isPresented ? <Badge>Presented</Badge> : "-"}</td>
                                   </tr>
                                 );
