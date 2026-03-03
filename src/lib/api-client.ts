@@ -1,5 +1,13 @@
 type HttpMethod = "GET" | "POST" | "PATCH";
 
+export type ApiClientError = {
+  status: number;
+  message: string;
+  body?: unknown;
+  requestId?: string | null;
+  retryAfterSeconds?: number | null;
+};
+
 export type UsageMetric = {
   id: string;
   label: string;
@@ -30,6 +38,70 @@ export type ChatMessage = {
   content: string;
   createdAt: string;
   isOptimistic?: boolean;
+};
+
+export type ChatMessageStatus = "NEEDS_CLARIFICATION" | "OK" | "ERROR";
+export type ChatNextAction = "ASK_QUESTION" | "CONFIRM" | "PRESENT_OFFERS";
+
+export type ChatSession = {
+  sessionId: string;
+  createdAt: string;
+  expiresAt: string;
+  propertyId: string;
+  language: string | null;
+  greeting: string;
+};
+
+export type ChatMessageRequest = {
+  message: string;
+  clientMessageId: string;
+  metadata?: { locale?: string; device?: string };
+};
+
+export type ChatOffer = {
+  id: string;
+  name: string;
+  description: string;
+  rate_type: "flexible" | "non_refundable";
+  rate_label?: string;
+  cancellation_policy: string;
+  payment_policy: string;
+  enhancements?: string[];
+  disclosures?: string[];
+  fee_breakdown?: Array<{
+    label: string;
+    amount: number;
+  }>;
+  price: {
+    currency: string;
+    per_night: number;
+    subtotal: number;
+    taxes_and_fees: number;
+    total: number;
+    add_ons_total?: number;
+    total_with_add_ons?: number;
+  };
+};
+
+export type ChatCommerceOffer = Record<string, unknown>;
+
+export type ChatCommerce = {
+  offers?: ChatCommerceOffer[];
+  [key: string]: unknown;
+};
+
+export type ChatMessageResponse = {
+  data: {
+    sessionId: string;
+    assistantMessage: string;
+    status: ChatMessageStatus;
+    nextAction: ChatNextAction;
+    slots: Record<string, unknown>;
+    offers?: ChatOffer[];
+    commerce?: ChatCommerce;
+    decisionId?: string;
+    debug?: Record<string, unknown>;
+  };
 };
 
 export type OffersLogDecisionStatus = "OK" | "NO_OFFERS" | "FALLBACK_ONLY" | "ERROR";
@@ -244,6 +316,34 @@ const isMock = !API_BASE_URL;
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+export class ApiClientRequestError extends Error implements ApiClientError {
+  status: number;
+  body?: unknown;
+  requestId?: string | null;
+  retryAfterSeconds?: number | null;
+
+  constructor(input: ApiClientError) {
+    super(input.message);
+    this.name = "ApiClientRequestError";
+    this.status = input.status;
+    this.body = input.body;
+    this.requestId = input.requestId;
+    this.retryAfterSeconds = input.retryAfterSeconds;
+  }
+}
+
+async function parseErrorBody(response: Response): Promise<unknown> {
+  const text = await response.text();
+  if (!text) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
 async function request<T>(
   path: string,
   method: HttpMethod,
@@ -265,8 +365,18 @@ async function request<T>(
   });
 
   if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || "Unexpected API error");
+    const errorBody = await parseErrorBody(response);
+    const fallbackMessage =
+      typeof errorBody === "string"
+        ? errorBody
+        : (errorBody as { message?: string } | undefined)?.message;
+    throw new ApiClientRequestError({
+      status: response.status,
+      message: fallbackMessage || "Unexpected API error",
+      body: errorBody,
+      requestId: response.headers.get("x-request-id"),
+      retryAfterSeconds: Number(response.headers.get("retry-after")) || null,
+    });
   }
 
   if (response.status === 204) {
@@ -347,6 +457,252 @@ const mockOffersData = {
   ] satisfies PropertyListItem[],
 };
 
+let mockChatSessionCount = 0;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function firstString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function firstNumber(...values: unknown[]): number | undefined {
+  for (const value of values) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function normalizeLabel(value: string): string {
+  const withSpaces = value
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .trim();
+  if (!withSpaces) {
+    return "";
+  }
+  return withSpaces
+    .split(/\s+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function toTitleCase(value: string): string {
+  return value
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function toStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((entry) => {
+      if (typeof entry === "string") {
+        return entry.trim();
+      }
+      if (isRecord(entry)) {
+        return (
+          firstString(entry.name, entry.label, entry.id, entry.code) ?? ""
+        ).trim();
+      }
+      return "";
+    })
+    .filter(Boolean);
+}
+
+function looksGenericOfferName(value: string): boolean {
+  return /^offer\s*\d+$/i.test(value.trim());
+}
+
+function normalizeChatOffer(rawOffer: unknown, fallbackIndex: number): ChatOffer {
+  const offer = isRecord(rawOffer) ? rawOffer : {};
+  const roomType = isRecord(offer.roomType) ? offer.roomType : {};
+  const ratePlan = isRecord(offer.ratePlan) ? offer.ratePlan : {};
+  const price = isRecord(offer.price) ? offer.price : {};
+  const pricing = isRecord(offer.pricing) ? offer.pricing : {};
+  const breakdown = isRecord(pricing.breakdown) ? pricing.breakdown : {};
+  const includedFees = isRecord(breakdown.includedFees) ? breakdown.includedFees : {};
+
+  const currency =
+    firstString(price.currency, pricing.currency, offer.currency) ?? "USD";
+  const subtotal =
+    firstNumber(price.subtotal, breakdown.baseRateSubtotal, breakdown.subtotal, pricing.subtotal) ?? 0;
+  const taxesAndFees =
+    firstNumber(price.taxes_and_fees, breakdown.taxesAndFees, pricing.taxesAndFees) ?? 0;
+  const addOnsTotal =
+    firstNumber(
+      price.add_ons_total,
+      breakdown.addOnsTotal,
+      includedFees.totalIncludedFees,
+      includedFees.total_included_fees,
+    ) ?? 0;
+  const total =
+    firstNumber(price.total, pricing.total, subtotal + taxesAndFees + addOnsTotal) ?? 0;
+  const totalWithAddOns =
+    firstNumber(price.total_with_add_ons, pricing.totalWithAddOns) ??
+    (addOnsTotal > 0 ? total : undefined);
+
+  const rateTypeRaw = firstString(
+    offer.rate_type,
+    offer.rateType,
+    offer.refundability,
+    offer.type,
+  );
+  const rateType: ChatOffer["rate_type"] =
+    rateTypeRaw === "non_refundable" ||
+    rateTypeRaw?.toLowerCase().includes("non") ||
+    rateTypeRaw?.toLowerCase().includes("no_refund")
+      ? "non_refundable"
+      : "flexible";
+
+  const feeBreakdown = Object.entries(includedFees)
+    .filter(([key, value]) => {
+      const lowerKey = key.toLowerCase();
+      if (
+        lowerKey.includes("totalincludedfees") ||
+        lowerKey.includes("total_included_fees") ||
+        lowerKey.includes("pernight") ||
+        lowerKey.includes("per_night") ||
+        lowerKey === "nights" ||
+        lowerKey.includes("addon")
+      ) {
+        return false;
+      }
+      return typeof value === "number" && Number.isFinite(value) && value > 0;
+    })
+    .map(([key, value]) => ({
+      label: normalizeLabel(
+        key
+          .replace(/total$/i, "")
+          .replace(/_total$/i, ""),
+      ),
+      amount: Number(value),
+    }));
+
+  const enhancements = toStringArray(offer.enhancements);
+  const disclosures = toStringArray(offer.disclosures);
+  const rateLabelRaw =
+    firstString(
+      offer.ratePlanName,
+      offer.rate_plan_name,
+      ratePlan.name,
+      ratePlan.id,
+      offer.ratePlan,
+      offer.rate_plan,
+      offer.rate_type,
+    ) ?? rateType;
+
+  const normalizedRateLabel =
+    rateLabelRaw.toLowerCase() === "flexible"
+      ? "Flexible"
+      : rateLabelRaw.toLowerCase() === "non_refundable"
+        ? "Non-refundable"
+        : toTitleCase(rateLabelRaw);
+
+  const paymentPolicy =
+    firstString(
+      offer.payment_policy,
+      offer.paymentTiming,
+      offer.payment_timing,
+    ) ??
+    (rateType === "non_refundable" ? "Pay now" : "Pay at property");
+
+  const cancellationPolicy =
+    firstString(
+      offer.cancellation_policy,
+      offer.cancellationSummary,
+      offer.policySummary,
+      offer.cancellation_policy_summary,
+    ) ??
+    (rateType === "non_refundable"
+      ? "This rate is non-refundable."
+      : "You can cancel for free up to a day before check-in.");
+
+  const preferredName = firstString(
+    offer.roomTypeName,
+    offer.room_type_name,
+    roomType.name,
+    roomType.id,
+    offer.roomType,
+    offer.room_type,
+    offer.optionTitle,
+    offer.offerName,
+    offer.name,
+  );
+  const normalizedName =
+    preferredName && !looksGenericOfferName(preferredName)
+      ? preferredName
+      : firstString(
+          offer.roomTypeName,
+          offer.room_type_name,
+          roomType.name,
+          roomType.id,
+          offer.roomType,
+          offer.room_type,
+          offer.offerName,
+          offer.name,
+        );
+
+  return {
+    id: firstString(offer.id, offer.offerId, offer.offer_id) ?? `offer-${fallbackIndex + 1}`,
+    name:
+      normalizedName ??
+      firstString(offer.ratePlanName, offer.rate_plan_name, ratePlan.name, ratePlan.id) ??
+      `Offer ${fallbackIndex + 1}`,
+    description:
+      firstString(
+        offer.description,
+        offer.summary,
+        offer.roomTypeDescription,
+        offer.room_type_description,
+      ) ?? "Offer details available.",
+    rate_type: rateType,
+    rate_label: normalizedRateLabel,
+    cancellation_policy: cancellationPolicy,
+    payment_policy: paymentPolicy,
+    enhancements,
+    disclosures,
+    fee_breakdown: feeBreakdown,
+    price: {
+      currency,
+      per_night:
+        firstNumber(price.per_night, price.perNight, pricing.perNight) ?? 0,
+      subtotal,
+      taxes_and_fees: taxesAndFees,
+      total,
+      add_ons_total: addOnsTotal > 0 ? addOnsTotal : undefined,
+      total_with_add_ons: totalWithAddOns,
+    },
+  };
+}
+
+export function getChatOffersFromResponse(data: ChatMessageResponse["data"]): ChatOffer[] {
+  const commerceOffers = data.commerce?.offers;
+  if (Array.isArray(commerceOffers) && commerceOffers.length > 0) {
+    return commerceOffers.map((entry, index) => normalizeChatOffer(entry, index));
+  }
+
+  if (Array.isArray(data.offers) && data.offers.length > 0) {
+    return data.offers.map((entry, index) => normalizeChatOffer(entry, index));
+  }
+
+  return [];
+}
+
 function buildQueryString(params: Record<string, string | number | boolean | undefined>) {
   const searchParams = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
@@ -422,6 +778,130 @@ export async function sendChatMessage(message: string): Promise<ChatMessage> {
   );
 
   return mapToChatMessage(response.data);
+}
+
+export async function createChatSession(input: {
+  property_id?: string;
+  timezone?: string;
+  language?: string;
+  clientConversationId?: string;
+}): Promise<ChatSession> {
+  if (isMock) {
+    await delay(240);
+    mockChatSessionCount += 1;
+    return {
+      sessionId: `mock-session-${mockChatSessionCount}`,
+      createdAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+      propertyId: input.property_id ?? "demo_property",
+      language: input.language ?? null,
+      greeting: `Welcome to ${input.property_id ?? "demo_property"}. How can I help with your stay?`,
+    };
+  }
+
+  const response = await request<{ data: ChatSession }>("/chat/sessions", "POST", input);
+  return response.data;
+}
+
+export async function sendChatSessionMessage(
+  sessionId: string,
+  input: ChatMessageRequest,
+): Promise<ChatMessageResponse["data"]> {
+  if (isMock) {
+    await delay(520);
+    return {
+      sessionId,
+      assistantMessage:
+        "Thanks. I can help with that request. Here are two mock offers you can inspect.",
+      status: "OK",
+      nextAction: "PRESENT_OFFERS",
+      slots: {},
+      commerce: {
+        offers: [
+          {
+            id: "offer-1",
+            name: "Deluxe Flexible",
+            description: "King room with breakfast included.",
+            rate_type: "flexible",
+            cancellation_policy: "Free cancellation until 24h before check-in.",
+            payment_policy: "Pay at property",
+            pricing: {
+              currency: "USD",
+              perNight: 189,
+              total: 440,
+              breakdown: {
+                baseRateSubtotal: 378,
+                taxesAndFees: 62,
+                includedFees: {
+                  totalIncludedFees: 0,
+                },
+              },
+            },
+          },
+          {
+            id: "offer-2",
+            name: "Saver Non-refundable",
+            description: "Best value room-only rate.",
+            rate_type: "non_refundable",
+            cancellation_policy: "Non-refundable after booking.",
+            payment_policy: "Pay now",
+            pricing: {
+              currency: "USD",
+              perNight: 162,
+              total: 380,
+              breakdown: {
+                baseRateSubtotal: 324,
+                taxesAndFees: 56,
+                includedFees: {
+                  totalIncludedFees: 0,
+                },
+              },
+            },
+          },
+        ],
+      },
+      offers: [
+        {
+          id: "offer-1",
+          name: "Deluxe Flexible",
+          description: "King room with breakfast included.",
+          rate_type: "flexible",
+          cancellation_policy: "Free cancellation until 24h before check-in.",
+          payment_policy: "Pay at property",
+          price: {
+            currency: "USD",
+            per_night: 189,
+            subtotal: 378,
+            taxes_and_fees: 62,
+            total: 440,
+          },
+        },
+        {
+          id: "offer-2",
+          name: "Saver Non-refundable",
+          description: "Best value room-only rate.",
+          rate_type: "non_refundable",
+          cancellation_policy: "Non-refundable after booking.",
+          payment_policy: "Pay now",
+          price: {
+            currency: "USD",
+            per_night: 162,
+            subtotal: 324,
+            taxes_and_fees: 56,
+            total: 380,
+          },
+        },
+      ],
+      decisionId: `mock-decision-${input.clientMessageId}`,
+    };
+  }
+
+  const response = await request<ChatMessageResponse>(
+    `/chat/sessions/${encodeURIComponent(sessionId)}/messages`,
+    "POST",
+    input,
+  );
+  return response.data;
 }
 
 export async function fetchProperties(

@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 const links = [
   { href: "/demo/offers", label: "Offer Generator" },
   { href: "/demo/offers/logs", label: "Logs" },
+  { href: "/demo/chat", label: "Chat" },
 ];
 
 export function AppHeader() {

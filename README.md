@@ -115,6 +115,42 @@ Use this route to inspect historical offer decisions in a table-first ops log.
 - `GET /offers/logs/:decisionId` should return normalized created-event sections plus integrity flags and normalization warnings.
 - `includeRawPayloads` and optional payload cap handling are supported for detail retrieval.
 
+## Chat demo (`/demo/chat`)
+
+Use this route to demo backend chat sessions with offer parity to `/offers/generate`.
+
+1. Start frontend with `pnpm dev`.
+2. Ensure backend exposes:
+   - `POST /chat/sessions`
+   - `POST /chat/sessions/:sessionId/messages`
+3. Set `NEXT_PUBLIC_API_BASE_URL` so frontend can call those endpoints.
+4. Open `http://localhost:3000/demo/chat`.
+5. Pick a property and start chatting.
+
+### Chat response contract notes
+
+- `POST /chat/sessions/:sessionId/messages` supports this response shape:
+  - `data.sessionId`
+  - `data.assistantMessage`
+  - `data.status` (`NEEDS_CLARIFICATION | OK | ERROR`)
+  - `data.nextAction` (`ASK_QUESTION | CONFIRM | PRESENT_OFFERS`)
+  - `data.slots`
+  - `data.offers?` (legacy/simplified path)
+  - `data.commerce?` (web parity path)
+  - `data.decisionId?`
+  - `data.debug?`
+- Frontend source of truth for offer rendering is `data.commerce.offers` when present.
+- `data.offers` is only used as a fallback when `data.commerce.offers` is absent.
+
+### Offer parity behavior in chat
+
+- Chat offer cards intentionally reuse the same offer card component as the `/demo/offers` summary.
+- Commerce pricing fields are mapped to the same card breakdown:
+  - Base price (`pricing.breakdown.baseRateSubtotal`)
+  - Taxes & fees (`pricing.breakdown.taxesAndFees`)
+  - Included fee rows from `pricing.breakdown.includedFees` (for example pet/parking totals)
+- Room/rate subtitle prefers room-type/rate-plan labels from commerce data so chat and offers display consistent names.
+
 ## Available scripts
 
 | Script | Description |
