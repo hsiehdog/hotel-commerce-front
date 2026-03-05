@@ -1,78 +1,94 @@
-## AI Control Center
+# Hotel CommerceCo Frontend
 
-Starter kit for AI-driven software that ships with:
+Next.js 16 frontend for hotel commerce demos and authenticated operator workflows. The app is centered on three demo surfaces:
 
-- Next.js App Router + TypeScript + Tailwind CSS v4
-- shadcn/ui primitives for cards, forms, and chat
-- Better Auth (email/password) with secure session cookies and a Next.js route handler
-- Dashboard with usage, projects, activity timeline, and an AI chat surface
+- `/demo/offers`: offer generation dashboard for `POST /offers/generate`
+- `/demo/offers/logs`: operational log explorer for historical offer decisions
+- `/demo/chat`: conversational booking demo backed by chat sessions
 
-## Quick start
+The authenticated account area is still available under `/dashboard`, `/settings`, `/login`, and `/signup`, but the root route currently redirects to `/demo/offers`.
+
+## Stack
+
+- Next.js App Router
+- React 19
+- TypeScript
+- Tailwind CSS v4
+- shadcn/ui primitives
+- TanStack Query
+- Better Auth client
+- Vitest + React Testing Library
+
+## Getting started
 
 ```bash
 pnpm install
 pnpm dev
 ```
 
-Visit [http://localhost:3000](http://localhost:3000) for the marketing page, `/signup` or `/login` for auth, and `/dashboard` for the protected experience.
+Open [http://localhost:3000](http://localhost:3000).
 
-## Backend integration
+## Scripts
 
-This project assumes your backend owns the Better Auth instance (as outlined in [discussion #5578](https://github.com/better-auth/better-auth/discussions/5578)). Point `NEXT_PUBLIC_AUTH_BASE_URL` to that backend, ensure it exposes the Better Auth router at `NEXT_PUBLIC_AUTH_BASE_PATH`, and allow cross-origin credentials if the domains differ. The login/signup forms never touch a local auth route—they call the backend directly, which also has access to the real auth tables.
-
-## Environment variables
-
-Create a `.env.local` from the provided example.
-
-| Variable | Description |
+| Command | Purpose |
 | --- | --- |
-| `NEXT_PUBLIC_APP_URL` | Public site URL for this frontend (used in marketing copy and fallbacks). |
-| `NEXT_PUBLIC_AUTH_BASE_URL` | Origin of your backend that runs Better Auth (e.g., `http://localhost:4000`). |
-| `NEXT_PUBLIC_AUTH_BASE_PATH` | Path segment for the Better Auth route on the backend (defaults to `/api/auth`). |
-| `NEXT_PUBLIC_API_BASE_URL` | Base URL for your backend/LLM API. When unset, the dashboard/chat use mocked responses. Requests include cookies, so enable CORS w/ credentials if this is a different origin. |
+| `pnpm dev` | Start the Next.js dev server |
+| `pnpm build` | Build for production |
+| `pnpm start` | Run the production build |
+| `pnpm lint` | Run ESLint |
+| `pnpm test` | Run Vitest once |
+| `pnpm test:watch` | Run Vitest in watch mode |
+| `npx tsc --noEmit` | Run a full TypeScript check |
 
-Run the dev server with `pnpm dev`. The frontend talks to your backend-hosted Better Auth instance, which issues secure HTTP-only cookies that the browser sends automatically.
+## Environment
 
-## Architecture notes
+Create `.env.local` as needed.
 
-- `src/lib/auth/client.ts` points to your backend-hosted Better Auth instance (derived from `NEXT_PUBLIC_AUTH_BASE_URL`/`NEXT_PUBLIC_AUTH_BASE_PATH`) and exposes hooks/actions (`authClient.useSession`, `authClient.signIn.email`, etc.).
-- `src/lib/api-client.ts` centralizes backend calls. When `NEXT_PUBLIC_API_BASE_URL` is set the helper automatically includes the Better Auth session cookie (`credentials: "include"`).
-- React Query powers data access (`src/components/providers.tsx`) and shares caches between the dashboard and chat.
-- UI primitives live in `src/components/ui/*` (shadcn) and higher-level building blocks live under `src/components`.
+| Variable | Required | Notes |
+| --- | --- | --- |
+| `NEXT_PUBLIC_API_BASE_URL` | No | Base URL for backend APIs. When unset, `src/lib/api-client.ts` runs in mock mode for dashboard metrics, property lists, and chat sessions/messages. `src/lib/offers-demo.ts` still posts to `/offers/generate` on the current origin. |
+| `NEXT_PUBLIC_AUTH_BASE_URL` | No | Preferred Better Auth backend origin. If unset, auth falls back to `NEXT_PUBLIC_API_BASE_URL`, then `NEXT_PUBLIC_APP_URL`. |
+| `NEXT_PUBLIC_AUTH_BASE_PATH` | No | Better Auth route path. Defaults to `/api/auth`. |
+| `NEXT_PUBLIC_APP_URL` | No | Frontend origin fallback used by the auth client when no explicit auth or API base URL is set. |
 
-## Offers demo dashboard (`/demo/offers`)
+## Auth and API behavior
 
-Use this route to demo `POST /offers/generate` as a business-facing offer decision dashboard.
+- `src/lib/auth/client.ts` creates the Better Auth client and always sends cookies with `credentials: "include"`.
+- `src/lib/api-client.ts` centralizes authenticated backend requests and also uses `credentials: "include"`.
+- If `NEXT_PUBLIC_API_BASE_URL` is not set:
+  - dashboard metrics, projects, activity, and basic AI chat use local mock data
+  - `/demo/chat` still works with mocked sessions and mocked room recommendations
+  - `/demo/offers/logs` can load mocked properties, but detail fetches are unavailable
+- `/demo/offers` does not use the mock API client. It sends a real `fetch` request to `${NEXT_PUBLIC_API_BASE_URL}/offers/generate` or `/offers/generate` if no base URL is configured.
 
-1. Start the frontend with `pnpm dev`.
-2. Ensure your backend serves `POST /offers/generate`.
-3. If backend is on another origin, set `NEXT_PUBLIC_API_BASE_URL` in `.env.local` (for example `http://localhost:4000`).
-4. Open `http://localhost:3000/demo/offers`.
-5. Keep **Basic** mode for day-to-day demos:
-   - guest request inputs
-  - constraint inputs: `pet_friendly`, `accessible_room`, `needs_two_beds`, `parking_needed`
-   - business-labeled presets (`Family stay`, `Late arrival`, `High-demand weekend`, `Price-sensitive guest`)
-   - quick date chips (`Tonight`, `Tomorrow`, `This weekend`, `Next weekend`)
-6. Expand **Advanced** only when needed:
-   - `Demo scenario (advanced)`
-   - `Raw JSON override`
-   - `Explainability mode` toggle (defaults to on)
-7. Click **Run Offer Decision**.
-8. Review top-down:
-   - `Recommended Room` (room, plan, price breakdown, reasons, policy, inventory note)
-   - `Recommended Upsells` when the engine returns attach candidates
-   - `User Profile` (persona confidence + scoring weights when available)
-   - `Room Ranking` and `Audit Trail` for ranked rooms, effective config, and raw payload review
+## Routes
 
-### `/offers/generate` response shape used by the frontend
+| Route | Purpose |
+| --- | --- |
+| `/` | Redirects to `/demo/offers` |
+| `/demo/offers` | Offer decision dashboard |
+| `/demo/offers/logs` | Offer log list + detail drawer |
+| `/demo/chat` | Chat demo with property-scoped sessions |
+| `/dashboard` | Protected operator dashboard with metrics and chat panel |
+| `/settings` | Protected profile + password settings |
+| `/login` | Better Auth sign-in form |
+| `/signup` | Better Auth sign-up form |
 
-The current frontend contract is centered on a single top recommendation plus ranking context:
+## Backend contracts
 
-- `propertyId` / `property_id`
+### Offer generator
+
+Frontend request is assembled in `src/lib/offers-demo.ts` and sent to:
+
+- `POST /offers/generate`
+
+The UI expects a response centered on:
+
+- `propertyId` or `property_id`
 - `channel`
 - `currency`
-- `priceBasisUsed` / `price_basis_used`
-- `configVersion` / `config_version`
+- `priceBasisUsed` or `price_basis_used`
+- `configVersion` or `config_version`
 - `persona_confidence`
 - `recommended_room`
 - `recommended_offers`
@@ -80,113 +96,101 @@ The current frontend contract is centered on a single top recommendation plus ra
 - `fallback`
 - `debug`
 
-### Screenshot notes
+### Offer logs
 
-Capture these screens for stakeholder walkthroughs:
+`src/lib/api-client.ts` currently calls:
 
-1. Basic mode request form with preset chips and quick date chips.
-2. Recommended room card with pricing breakdown and rationale.
-3. User Profile and Room Ranking sections.
-4. Audit Trail tabs with effective config and ranked room payloads.
-5. Raw JSON tab with request/response and download action.
+- `GET /properties`
+- `GET /offers/logs`
+- `GET /offers/logs/:decisionId`
 
-## Offer logs dashboard (`/demo/offers/logs`)
+Notes:
 
-Use this route to inspect historical offer decisions in a table-first ops log.
+- property fetch uses `activeOnly=true` by default
+- logs list supports query filters such as `propertyId`, `from`, `to`, `channel`, `decisionStatus`, `requestId`, `decisionId`, `truncated`, `errors`, `fallbackOnly`, `slow`, `dlq`, `limit`, and `cursor`
+- detail fetch can send `includeRawPayloads` and `payloadCapKb`
+- list responses are normalized from either camelCase or snake_case payloads
 
-1. Start frontend with `pnpm dev`.
-2. Ensure backend exposes:
-   - `GET /properties` (`activeOnly=true|false`, default true)
-   - `GET /offers/logs`
-   - `GET /offers/logs/:decisionId`
-3. Set `NEXT_PUBLIC_API_BASE_URL` so frontend can call those endpoints.
-4. Open `http://localhost:3000/demo/offers/logs`.
-5. Select a property from the dropdown (auto-selects first active property when available).
-6. Use the log table for operational scan with columns:
-   - `recorded at` (no seconds)
-   - `channel`
-   - `property`
-   - `user details` (`check-in/check-out`, `rooms`, `adults/children`)
-   - `created outbox`
-   - `offer name`
-   - `total`
-7. Date range formatting in `user details` is deterministic:
-   - same day: `Mon D, YYYY`
-   - same month + year: `Mon D-D, YYYY`
-   - same year: `Mon D - Mon D, YYYY`
-   - different year: `Mon D, YYYY - Mon D, YYYY`
-8. Table rows are sourced directly from `GET /offers/logs` (no per-row detail fetch needed for list rendering).
-9. Click a row to open the detail drawer. The right side reuses the same post-run components from `/demo/offers`:
-   - `DecisionSummary`
-   - `GuestProfile`
-   - `CandidateAnalysis`
-   - `DebugPanel`
-10. Detail rendering uses `GET /offers/logs/:decisionId`, prioritizes `generateResponse.data`, and falls back to the table row’s primary offer when the detail payload is missing `recommended_room`.
+### Chat demo
 
-### Backend response notes
+`/demo/chat` currently depends on:
 
-- `GET /offers/logs` should enforce max 30-day range and support cursor pagination.
-- List rows should include table-first fields:
-  - `recordedAt`, `channel`, `property`, `checkIn`, `checkOut`, `rooms`, `adults`, `children`
-  - `createdOutbox` (`state`, `attempts`, `lastErrorSafeMessage`)
-  - `primaryOfferName`, `primaryOfferTotal`
-  - existing operational fields (`decisionStatus`, `offersCount`, `latencyMs`, etc.) are still supported
-- `GET /offers/logs/:decisionId` should include:
-  - `decision`, `events`, `normalized` (troubleshooting/audit)
-  - `generateResponse.data` matching `/offers/generate` response contract for frontend rendering
-- Frontend detail requests use `includeRawPayloads=true` with high payload cap so profile/scoring/candidate context can be rendered consistently.
+- `POST /chat/sessions`
+- `POST /chat/sessions/:sessionId/messages`
+- `GET /properties`
 
-## Chat demo (`/demo/chat`)
+The message response used by the frontend is:
 
-Use this route to demo backend chat sessions with offer parity to `/offers/generate`.
+- `data.sessionId`
+- `data.assistantMessage`
+- `data.status`
+- `data.nextAction`
+- `data.slots`
+- `data.commerce`
+- `data.decisionId`
+- `data.debug`
 
-1. Start frontend with `pnpm dev`.
-2. Ensure backend exposes:
-   - `POST /chat/sessions`
-   - `POST /chat/sessions/:sessionId/messages`
-3. Set `NEXT_PUBLIC_API_BASE_URL` so frontend can call those endpoints.
-4. Open `http://localhost:3000/demo/chat`.
-5. Pick a property and start chatting.
+Offer rendering in chat prefers `data.commerce.recommended_room` and falls back to the first entry in `data.commerce.ranked_rooms`.
 
-### Chat response contract notes
+### Authenticated dashboard
 
-- `POST /chat/sessions/:sessionId/messages` supports this response shape:
-  - `data.sessionId`
-  - `data.assistantMessage`
-  - `data.status` (`NEEDS_CLARIFICATION | OK | ERROR`)
-  - `data.nextAction` (`ASK_QUESTION | CONFIRM | PRESENT_OFFERS`)
-  - `data.slots`
-  - `data.offers?` (legacy/simplified path)
-  - `data.commerce?` (web parity path)
-  - `data.decisionId?`
-  - `data.debug?`
-- Frontend source of truth is now `data.commerce.recommended_room`.
-- If `recommended_room` is absent, chat falls back to the first item in `data.commerce.ranked_rooms`.
-- `data.offers` remains a legacy field in the API type, but the current chat demo does not rely on it for rendering.
+When `NEXT_PUBLIC_API_BASE_URL` is configured and mock mode is off, `/dashboard` calls:
 
-### Offer parity behavior in chat
+- `GET /analytics/usage`
+- `GET /projects`
+- `GET /activity`
+- `GET /users/me/sessions`
+- `POST /ai/generate`
 
-- Chat currently renders a compact single-card recommendation summary.
-- The card is derived from the same room recommendation payload used by `/demo/offers`:
-  - `recommended_room.room_type`
-  - `recommended_room.rate_plan`
-  - `recommended_room.total_price`
-  - `recommended_room.policy_summary`
-- If only `ranked_rooms` is present, the first ranked room is converted into that same compact card shape.
+`/settings` also uses backend profile endpoints exposed through `src/lib/api-client.ts`.
 
-## Available scripts
+## Demo notes
 
-| Script | Description |
+### `/demo/offers`
+
+- request form supports business presets, occupancy editing, and advanced JSON overrides
+- the parser normalizes response data into `DecisionSummary`, `GuestProfile`, `CandidateAnalysis`, and `DebugPanel`
+- validation is local before submit
+
+### `/demo/offers/logs`
+
+- list view is table-first and does not require per-row detail fetches
+- selecting a row opens a detail drawer
+- detail rendering reuses the same offer analysis components used by `/demo/offers`
+
+### `/demo/chat`
+
+- stores the active chat session in `sessionStorage`
+- automatically scopes sessions by selected property
+- handles validation, expiry, retry, and rate-limit UI states
+
+## Project structure
+
+| Path | Purpose |
 | --- | --- |
-| `pnpm dev` | Start the Next.js dev server |
-| `pnpm build` | Create a production build |
-| `pnpm start` | Run the built app |
-| `pnpm lint` | Run ESLint |
-| `pnpm test` | Run Vitest once (jsdom + React Testing Library setup) |
-| `pnpm test:watch` | Run Vitest in watch mode |
+| `src/app` | Route entrypoints |
+| `src/components/auth` | Auth form and route guard |
+| `src/components/chat` | Chat demo and reusable chat UI |
+| `src/components/dashboard` | Protected dashboard cards and activity feed |
+| `src/components/layout` | App shell and shared header |
+| `src/components/offers` | Offer generator, logs dashboard, and detail panels |
+| `src/components/ui` | shadcn/ui primitives |
+| `src/hooks` | React Query hooks |
+| `src/lib/api-client.ts` | Backend client, normalization, mock data |
+| `src/lib/offers-demo.ts` | Offer request builder and response parser |
+| `src/test/setup.js` | Vitest setup |
 
-## Next steps
+## Verification
 
-- Replace the memory adapter with your database of choice (Prisma, Drizzle, etc.).
-- Point `NEXT_PUBLIC_API_BASE_URL` to your backend so the dashboard and chat call real services.
-- Extend the chat panel to stream tokens from your LLM provider or trigger workflows via function calling.
+After changes, run:
+
+```bash
+pnpm lint
+npx tsc --noEmit
+```
+
+If you changed tests or behavior, also run:
+
+```bash
+pnpm test
+```
