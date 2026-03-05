@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ChatNextAction, ChatOffer, ChatMessageStatus } from "@/lib/api-client";
+import type { RecommendedRoom } from "@/lib/offers-demo";
+import { ChatNextAction, ChatMessageStatus } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 import { ChatOffersList } from "@/components/chat/chat-offers-list";
 
@@ -11,7 +12,7 @@ export type DemoChatMessageItem = {
   createdAt: string;
   status?: ChatMessageStatus;
   nextAction?: ChatNextAction;
-  offers?: ChatOffer[];
+  recommendedRoom?: RecommendedRoom | null;
   decisionId?: string;
   isOptimistic?: boolean;
   isRetryable?: boolean;
@@ -39,17 +40,23 @@ function formatTimestamp(value?: string) {
 export function DemoChatMessage({ message, onRetry }: DemoChatMessageProps) {
   const isUser = message.role === "user";
   const shouldShowDebugBadges = process.env.NODE_ENV !== "production";
+  const shouldShowOfferCard = !isUser && message.status === "OK" && Boolean(message.recommendedRoom);
+  const shouldShowMessageText = !shouldShowOfferCard;
 
   return (
     <div className={cn("flex w-full", isUser ? "justify-end" : "justify-start")}>
       <div
         className={cn(
-          "max-w-[92%] rounded-2xl border px-4 py-2 text-sm shadow-sm sm:max-w-[80%]",
-          isUser ? "bg-primary text-primary-foreground" : "bg-muted/60 text-foreground",
+          "text-sm",
+          shouldShowOfferCard ? "max-w-full sm:max-w-[92%]" : "max-w-[92%] sm:max-w-[80%]",
+          shouldShowOfferCard ? "rounded-none border-0 bg-transparent px-0 py-0 shadow-none" : "rounded-2xl border px-4 py-2 shadow-sm",
+          isUser ? "bg-primary text-primary-foreground" : shouldShowOfferCard ? "text-foreground" : "bg-muted/60 text-foreground",
           message.isOptimistic ? "opacity-70" : "opacity-100",
         )}
       >
-        <p className="whitespace-pre-wrap leading-relaxed">{message.text}</p>
+        {shouldShowMessageText ? (
+          <p className="whitespace-pre-wrap leading-relaxed">{message.text}</p>
+        ) : null}
         {!isUser && shouldShowDebugBadges && message.status ? (
           <div className="mt-2 flex flex-wrap gap-1">
             <Badge variant="outline">{message.status}</Badge>
@@ -58,8 +65,8 @@ export function DemoChatMessage({ message, onRetry }: DemoChatMessageProps) {
           </div>
         ) : null}
 
-        {!isUser && message.status === "OK" && (message.offers?.length ?? 0) > 0 ? (
-          <ChatOffersList offers={message.offers || []} />
+        {!isUser && shouldShowOfferCard ? (
+          <ChatOffersList recommendedRoom={message.recommendedRoom ?? null} />
         ) : null}
 
         {!isUser && message.status === "ERROR" && message.isRetryable && onRetry ? (

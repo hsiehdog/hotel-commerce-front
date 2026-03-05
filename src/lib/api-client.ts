@@ -1,3 +1,5 @@
+import type { RecommendedRoom } from "@/lib/offers-demo";
+
 type HttpMethod = "GET" | "POST" | "PATCH";
 
 export type ApiClientError = {
@@ -626,6 +628,169 @@ export function getChatOffersFromResponse(data: ChatMessageResponse["data"]): Ch
   }
 
   return [];
+}
+
+function toRecommendedRoomPriceRows(value: unknown): Array<{ label: string; amount: number }> {
+  if (isRecord(value)) {
+    const groups = new Map<string, { total: number | null; perNight: number | null; flatFee: number | null }>();
+
+    for (const [key, rawValue] of Object.entries(value)) {
+      const numeric = firstNumber(rawValue);
+      if (numeric == null || numeric <= 0) {
+        continue;
+      }
+
+      if (key.endsWith("_total")) {
+        const base = key.slice(0, -"_total".length);
+        const current = groups.get(base) ?? { total: null, perNight: null, flatFee: null };
+        current.total = numeric;
+        groups.set(base, current);
+        continue;
+      }
+
+      if (key.endsWith("_per_night")) {
+        const base = key.slice(0, -"_per_night".length);
+        const current = groups.get(base) ?? { total: null, perNight: null, flatFee: null };
+        current.perNight = numeric;
+        groups.set(base, current);
+        continue;
+      }
+
+      if (key.endsWith("_flat_fee")) {
+        const base = `${key.slice(0, -"_flat_fee".length)}_fee`;
+        const current = groups.get(base) ?? { total: null, perNight: null, flatFee: null };
+        current.flatFee = numeric;
+        groups.set(base, current);
+        continue;
+      }
+
+      const current = groups.get(key) ?? { total: null, perNight: null, flatFee: null };
+      current.total = numeric;
+      groups.set(key, current);
+    }
+
+    return Array.from(groups.entries())
+      .map(([base, values]) => {
+        if (values.total === null || values.total <= 0) {
+          return null;
+        }
+
+        const suffix =
+          values.flatFee !== null && values.flatFee > 0
+            ? ""
+            : values.perNight !== null && values.perNight > 0
+              ? ` (${formatCompactCurrency(values.perNight)}/night)`
+              : "";
+
+        return {
+          label: `${toTitleLabel(base)}${suffix}`,
+          amount: values.total,
+        };
+      })
+      .filter((entry): entry is { label: string; amount: number } => entry !== null);
+  }
+
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((entry) => {
+      const row = isRecord(entry) ? entry : {};
+      const label = firstString(row.label, row.name, row.type);
+      const amount = firstNumber(row.amount, row.value, row.price);
+
+      if (!label || amount === null) {
+        return null;
+      }
+
+      return { label, amount };
+    })
+    .filter((entry): entry is { label: string; amount: number } => entry !== null);
+}
+
+function toTitleLabel(value: string): string {
+  return value
+    .replace(/_/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
+    .join(" ");
+}
+
+function formatCompactCurrency(amount: number): string {
+  if (Number.isInteger(amount)) {
+    return `$${amount}`;
+  }
+  return `$${amount.toFixed(2)}`;
+}
+
+function normalizeRecommendedRoomForDisplay(raw: Record<string, unknown>): RecommendedRoom {
+  const pricingBreakdown = isRecord(raw.pricing_breakdown) ? raw.pricing_breakdown : {};
+
+  return {
+    roomType: firstString(raw.room_type, raw.room_type_name) ?? "Recommended room",
+    ratePlan: firstString(raw.rate_plan, raw.rate_plan_name) ?? "Rate plan",
+    nightlyPrice: firstNumber(raw.nightly_price) ?? null,
+    totalPrice: firstNumber(raw.total_price, raw.price) ?? null,
+    pricingBreakdown: {
+      subtotal: firstNumber(pricingBreakdown.subtotal, raw.subtotal) ?? null,
+      taxesAndFees: firstNumber(
+        pricingBreakdown.taxes_and_fees,
+        pricingBreakdown.taxesAndFees,
+        raw.taxes_and_fees,
+      ) ?? null,
+      includedFees: toRecommendedRoomPriceRows(
+        pricingBreakdown.included_fees ?? pricingBreakdown.includedFees ?? raw.fee_breakdown,
+      ),
+    },
+    score: firstNumber(raw.score) ?? null,
+    reasons: toStringArray(raw.reasons),
+    policySummary: firstString(raw.policy_summary, raw.cancellation_policy) ?? "-",
+    inventoryNote: firstString(raw.inventory_note) ?? "",
+    roomTypeId: firstString(raw.room_type_id) ?? "",
+    ratePlanId: firstString(raw.rate_plan_id) ?? "",
+  };
+}
+
+function normalizeRankedRoomForDisplay(raw: Record<string, unknown>): RecommendedRoom {
+  return {
+    roomType: firstString(raw.room_type_name, raw.room_type_id) ?? "Recommended room",
+    ratePlan: firstString(raw.rate_plan_name, raw.rate_plan_id) ?? "Rate plan",
+    nightlyPrice: firstNumber(raw.price) ?? null,
+    totalPrice: firstNumber(raw.price) ?? null,
+    pricingBreakdown: {
+      subtotal: firstNumber(raw.price) ?? null,
+      taxesAndFees: null,
+      includedFees: [],
+    },
+    score: firstNumber(raw.score) ?? null,
+    reasons: toStringArray(raw.reasons),
+    policySummary: firstString(raw.policy_summary, raw.cancellation_summary) ?? "Offer details available.",
+    inventoryNote: firstString(raw.inventory_note) ?? "",
+    roomTypeId: firstString(raw.room_type_id) ?? "",
+    ratePlanId: firstString(raw.rate_plan_id) ?? "",
+  };
+}
+
+export function getChatRecommendedRoomFromResponse(
+  data: ChatMessageResponse["data"],
+): RecommendedRoom | null {
+  const source = extractChatRecommendationSource(data);
+  if (!source) {
+    return null;
+  }
+
+  if (isRecord(source.recommended_room)) {
+    return normalizeRecommendedRoomForDisplay(source.recommended_room);
+  }
+
+  if (Array.isArray(source.ranked_rooms) && isRecord(source.ranked_rooms[0])) {
+    return normalizeRankedRoomForDisplay(source.ranked_rooms[0]);
+  }
+
+  return null;
 }
 
 function buildQueryString(params: Record<string, string | number | boolean | undefined>) {

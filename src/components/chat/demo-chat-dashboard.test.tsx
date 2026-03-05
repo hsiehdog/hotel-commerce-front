@@ -122,7 +122,9 @@ describe("DemoChatDashboard", () => {
     await user.click(screen.getByRole("button", { name: "Send" }));
 
     expect(await screen.findByText("Recommended Room")).toBeTruthy();
-    expect(screen.getByText("Family Suite")).toBeTruthy();
+    expect(screen.getByText("Family Suite | Flexible Rate")).toBeTruthy();
+    expect(screen.getByText("$987.00")).toBeTruthy();
+    expect(screen.queryByText("I found a recommendation")).toBeNull();
   });
 
   it("does not render offers list when recommended_room is absent", async () => {

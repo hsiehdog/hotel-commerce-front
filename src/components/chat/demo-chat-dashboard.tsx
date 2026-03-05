@@ -23,7 +23,7 @@ import {
   ChatSession,
   createChatSession,
   fetchProperties,
-  getChatOffersFromResponse,
+  getChatRecommendedRoomFromResponse,
   sendChatSessionMessage,
 } from "@/lib/api-client";
 import { emitChatTelemetry } from "@/lib/chat-telemetry";
@@ -455,7 +455,7 @@ export function DemoChatDashboard() {
     try {
       const response = await sendChatSessionMessage(state.chatSession.sessionId, payload);
       const latencyMs = Math.round(performance.now() - startedAt);
-      const offers = getChatOffersFromResponse(response);
+      const recommendedRoom = getChatRecommendedRoomFromResponse(response);
 
       dispatch({
         type: "APPEND_MESSAGE",
@@ -466,7 +466,7 @@ export function DemoChatDashboard() {
           createdAt: nowIso(),
           status: response.status,
           nextAction: response.nextAction,
-          offers,
+          recommendedRoom,
           decisionId: response.decisionId,
           isRetryable: response.status === "ERROR",
         },
@@ -478,7 +478,7 @@ export function DemoChatDashboard() {
         latencyMs,
       });
 
-      if (response.status === "OK" && offers.length > 0) {
+      if (response.status === "OK" && recommendedRoom) {
         emitChatTelemetry("chat_offers_presented", {
           sessionId: response.sessionId,
           clientMessageId: payload.clientMessageId,
