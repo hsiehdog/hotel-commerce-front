@@ -111,6 +111,57 @@ describe("OffersLogsDashboard", () => {
     });
   });
 
+  it("falls back to room and rate plan names in the table when primaryOfferName is missing", async () => {
+    mockedFetchOffersLogs.mockResolvedValue({
+      serverNow: new Date().toISOString(),
+      pageInfo: {
+        hasMore: false,
+        limit: 25,
+      },
+      rows: [
+        {
+          decisionId: "decision-split-name",
+          requestId: "request-split-name",
+          propertyId: "demo_property",
+          property: "demo_property",
+          eventRecordedAt: new Date().toISOString(),
+          recordedAt: new Date().toISOString(),
+          channel: "web",
+          checkIn: "2026-05-01",
+          checkOut: "2026-05-03",
+          rooms: 1,
+          adults: 2,
+          children: 0,
+          createdOutbox: {
+            state: "PROCESSED",
+            attempts: 1,
+            lastErrorSafeMessage: null,
+          },
+          primaryOfferName: null,
+          primaryOfferRoomTypeName: "Family Suite",
+          primaryOfferRatePlanName: "Flexible",
+          primaryOfferTotal: 451.36,
+          decisionStatus: "OK",
+          offersCount: 1,
+          truncated: false,
+          served: true,
+          servedSuccess: true,
+          reasonCodes: [],
+          reasonCodesCount: 0,
+          reasonCodesTruncated: false,
+          latencyMs: 950,
+          decisionAgeMs: 3_000,
+        },
+      ],
+    });
+
+    renderDashboard();
+
+    await waitFor(() => {
+      expect(screen.getByText("Family Suite - Flexible")).toBeTruthy();
+    });
+  });
+
   it("opens detail drawer and maps new contract payload", async () => {
     const user = userEvent.setup();
 
@@ -338,6 +389,100 @@ describe("OffersLogsDashboard", () => {
     expect(screen.queryByText("No Recommendation")).toBeNull();
   });
 
+  it("builds drawer fallback from split room and rate plan fields", async () => {
+    const user = userEvent.setup();
+
+    mockedFetchOffersLogs.mockResolvedValue({
+      serverNow: new Date().toISOString(),
+      pageInfo: {
+        hasMore: false,
+        limit: 25,
+      },
+      rows: [
+        {
+          decisionId: "decision-split-fallback",
+          requestId: "request-split-fallback",
+          propertyId: "demo_hotel_sf",
+          property: "demo_hotel_sf",
+          eventRecordedAt: new Date().toISOString(),
+          recordedAt: new Date().toISOString(),
+          channel: "web",
+          checkIn: "2026-05-01",
+          checkOut: "2026-05-03",
+          rooms: 1,
+          adults: 2,
+          children: 0,
+          createdOutbox: {
+            state: "PROCESSED",
+            attempts: 1,
+            lastErrorSafeMessage: null,
+          },
+          primaryOfferName: null,
+          primaryOfferRoomTypeName: "King Room",
+          primaryOfferRatePlanName: "Member Flexible",
+          primaryOfferTotal: 190.3,
+          decisionStatus: "OK",
+          offersCount: 1,
+          truncated: false,
+          served: true,
+          servedSuccess: true,
+          reasonCodes: [],
+          reasonCodesCount: 0,
+          reasonCodesTruncated: false,
+          latencyMs: 40,
+          decisionAgeMs: 100,
+        },
+      ],
+    });
+
+    mockedFetchOffersLogDetail.mockResolvedValue({
+      decision: {
+        decisionId: "decision-split-fallback",
+        tenantId: "tenant-1",
+        propertyId: "demo_hotel_sf",
+        requestId: "request-split-fallback",
+        channel: "web",
+        currency: "USD",
+        recommendedOfferCount: 1,
+        decisionStatus: "OK",
+        reasonCodes: [],
+        truncated: false,
+        eventRecordedAt: new Date().toISOString(),
+        served: true,
+        servedSuccess: true,
+        latencyMs: 40,
+      },
+      createdEventCount: 1,
+      selectedCreatedEventId: "event-created-split-fallback",
+      selectedCreatedEventRecordedAt: new Date().toISOString(),
+      integrityFlags: {
+        missingDebugPayload: false,
+      },
+      events: [],
+      normalized: {
+        reasonDetailsVersion: 1,
+        globalReasonCodes: [],
+        selectionSummary: null,
+        reasonDetails: {},
+        reasonsByOfferId: {},
+        presentedOffers: [],
+        topCandidates: [],
+        resolvedRequest: {},
+      },
+      generateResponse: null,
+    });
+
+    renderDashboard();
+
+    const rowLabel = await screen.findByText("King Room - Member Flexible");
+    const row = rowLabel.closest("tr");
+    expect(row).toBeTruthy();
+    await user.click(row as HTMLElement);
+
+    expect((await screen.findAllByText("Recommended Room")).length).toBeGreaterThan(0);
+    expect(screen.getByText("King Room | Member Flexible")).toBeTruthy();
+  });
+
   it("hydrates detail UI from generateResponse.data", async () => {
     const user = userEvent.setup();
 
@@ -490,6 +635,145 @@ describe("OffersLogsDashboard", () => {
 
     expect(await screen.findByText("Skyline Suite | Member Flexible")).toBeTruthy();
     expect(screen.getByText("Family Traveler")).toBeTruthy();
+    expect(screen.getByText("81.00%")).toBeTruthy();
+    expect(screen.getByText(/Value:/)).toBeTruthy();
+    expect(screen.getByText(/0.40/)).toBeTruthy();
+  });
+
+  it("hydrates profile and audit data from normalized debug payload when response debug is sparse", async () => {
+    const user = userEvent.setup();
+
+    mockedFetchOffersLogs.mockResolvedValue({
+      serverNow: new Date().toISOString(),
+      pageInfo: {
+        hasMore: false,
+        limit: 25,
+      },
+      rows: [
+        {
+          decisionId: "decision-debug-fallback",
+          requestId: "request-debug-fallback",
+          propertyId: "demo_hotel_sf",
+          property: "demo_hotel_sf",
+          eventRecordedAt: new Date().toISOString(),
+          recordedAt: new Date().toISOString(),
+          channel: "web",
+          checkIn: "2026-05-01",
+          checkOut: "2026-05-03",
+          rooms: 1,
+          adults: 2,
+          children: 0,
+          createdOutbox: {
+            state: "PROCESSED",
+            attempts: 1,
+            lastErrorSafeMessage: null,
+          },
+          primaryOfferName: "Skyline Suite",
+          primaryOfferTotal: 610.5,
+          decisionStatus: "OK",
+          offersCount: 1,
+          truncated: false,
+          served: true,
+          servedSuccess: true,
+          reasonCodes: [],
+          reasonCodesCount: 0,
+          reasonCodesTruncated: false,
+          latencyMs: 40,
+          decisionAgeMs: 100,
+        },
+      ],
+    });
+
+    mockedFetchOffersLogDetail.mockResolvedValue({
+      decision: {
+        decisionId: "decision-debug-fallback",
+        tenantId: "tenant-1",
+        propertyId: "demo_hotel_sf",
+        requestId: "request-debug-fallback",
+        channel: "web",
+        currency: "USD",
+        recommendedOfferCount: 1,
+        decisionStatus: "OK",
+        reasonCodes: [],
+        truncated: false,
+        eventRecordedAt: new Date().toISOString(),
+        served: true,
+        servedSuccess: true,
+        latencyMs: 40,
+      },
+      createdEventCount: 1,
+      selectedCreatedEventId: "event-created-debug-fallback",
+      selectedCreatedEventRecordedAt: new Date().toISOString(),
+      integrityFlags: {
+        missingDebugPayload: false,
+      },
+      events: [],
+      normalized: {
+        reasonDetailsVersion: 1,
+        globalReasonCodes: [],
+        selectionSummary: "Selected room from normalized payload",
+        reasonDetails: {},
+        reasonsByOfferId: {},
+        presentedOffers: [],
+        topCandidates: [],
+        resolvedRequest: {
+          property_id: "demo_hotel_sf",
+          currency: "USD",
+        },
+        engineVersion: "dev",
+        configVersion: 7,
+        artifactVersionsJson: {},
+        rawCorePayload: {},
+        rawDebugPayload: {
+          persona_confidence: {
+            family_traveler: 0.81,
+          },
+          scoring: {
+            weights: {
+              value: 0.4,
+            },
+          },
+        },
+      },
+      generateResponse: {
+        data: {
+          propertyId: "demo_hotel_sf",
+          channel: "web",
+          currency: "USD",
+          priceBasisUsed: "afterTax",
+          configVersion: 7,
+          recommended_room: {
+            room_type: "Skyline Suite",
+            rate_plan: "Member Flexible",
+            nightly_price: 305.25,
+            total_price: 610.5,
+            pricing_breakdown: {
+              subtotal: 540,
+              taxes_and_fees: 70.5,
+              included_fees: [],
+            },
+            score: 0.94,
+            reasons: ["Best fit for requested stay"],
+            policy_summary: "Free cancellation",
+            inventory_note: "Only 1 left",
+            room_type_id: "rt_skyline_suite",
+            rate_plan_id: "rp_member_flex",
+          },
+          recommended_offers: [],
+          ranked_rooms: [],
+          debug: {},
+        },
+      },
+    });
+
+    renderDashboard();
+
+    const rowLabel = await screen.findByText("Skyline Suite");
+    const row = rowLabel.closest("tr");
+    expect(row).toBeTruthy();
+    await user.click(row as HTMLElement);
+
+    expect(await screen.findByText("Family Traveler")).toBeTruthy();
     expect(screen.getByText("81.00%")).toBeTruthy();
     expect(screen.getByText(/Value:/)).toBeTruthy();
     expect(screen.getByText(/0.40/)).toBeTruthy();

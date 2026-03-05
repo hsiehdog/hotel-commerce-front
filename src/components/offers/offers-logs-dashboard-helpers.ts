@@ -17,6 +17,22 @@ export function formatPrimaryOfferTotal(amount?: number | null): string {
   return formatCurrency(amount);
 }
 
+export function formatPrimaryOfferName(row: {
+  primaryOfferName?: string | null;
+  primaryOfferRoomTypeName?: string | null;
+  primaryOfferRatePlanName?: string | null;
+}): string {
+  const direct = row.primaryOfferName?.trim();
+  if (direct) {
+    return direct;
+  }
+
+  const room = row.primaryOfferRoomTypeName?.trim();
+  const rate = row.primaryOfferRatePlanName?.trim();
+  const parts = [room, rate].filter(Boolean);
+  return parts.length > 0 ? parts.join(" - ") : "-";
+}
+
 export function formatPropertyLabel(label: string): string {
   return label
     .replace(/[_-]+/g, " ")
@@ -50,11 +66,19 @@ export function mapDetailToParsedOffersResponse(
     return null;
   }
 
+  const normalized = toRecordOrNull(detail.normalized) ?? {};
+  const normalizedDebug = toRecordOrNull(normalized.rawDebugPayload);
+  const normalizedCore = toRecordOrNull(normalized.rawCorePayload);
+  const normalizedCoreDebug = toRecordOrNull(normalizedCore?.debug);
+  const normalizedDebugNested = toRecordOrNull(normalizedDebug?.debug);
   const responseDebug = toRecordOrNull(responseData.debug);
   const data = {
+    ...normalizedCore,
     ...responseData,
     property_id: firstDefined(
       responseData.property_id,
+      normalizedCore?.property_id,
+      normalizedDebug?.property_id,
       responseData.propertyId,
       detail.decision.propertyId,
       "-",
@@ -62,27 +86,125 @@ export function mapDetailToParsedOffersResponse(
     propertyId: firstDefined(
       responseData.propertyId,
       responseData.property_id,
+      normalizedCore?.propertyId,
+      normalizedCore?.property_id,
+      normalizedDebug?.propertyId,
+      normalizedDebug?.property_id,
       detail.decision.propertyId,
       "-",
     ),
-    channel: firstDefined(responseData.channel, detail.decision.channel, "-"),
-    currency: firstDefined(responseData.currency, detail.decision.currency, "USD"),
+    channel: firstDefined(
+      responseData.channel,
+      normalizedCore?.channel,
+      normalizedDebug?.channel,
+      detail.decision.channel,
+      "-",
+    ),
+    currency: firstDefined(
+      responseData.currency,
+      normalizedCore?.currency,
+      normalizedDebug?.currency,
+      detail.decision.currency,
+      "USD",
+    ),
     price_basis_used: firstDefined(
       responseData.price_basis_used,
       responseData.priceBasisUsed,
+      normalizedCore?.price_basis_used,
+      normalizedCore?.priceBasisUsed,
       detail.decision.priceBasisUsed,
       "-",
     ),
     priceBasisUsed: firstDefined(
       responseData.priceBasisUsed,
       responseData.price_basis_used,
+      normalizedCore?.priceBasisUsed,
+      normalizedCore?.price_basis_used,
       detail.decision.priceBasisUsed,
       "-",
     ),
-    config_version: firstDefined(responseData.config_version, responseData.configVersion, "-"),
-    configVersion: firstDefined(responseData.configVersion, responseData.config_version, "-"),
+    config_version: firstDefined(
+      responseData.config_version,
+      responseData.configVersion,
+      normalizedCore?.config_version,
+      normalizedCore?.configVersion,
+      normalized.configVersion,
+      "-",
+    ),
+    configVersion: firstDefined(
+      responseData.configVersion,
+      responseData.config_version,
+      normalizedCore?.configVersion,
+      normalizedCore?.config_version,
+      normalized.configVersion,
+      "-",
+    ),
+    persona_confidence: firstDefined(
+      responseData.persona_confidence,
+      normalizedDebug?.persona_confidence,
+      normalizedDebugNested?.persona_confidence,
+      normalizedCore?.persona_confidence,
+      normalizedCoreDebug?.persona_confidence,
+      null,
+    ),
     debug: {
+      ...(normalizedCoreDebug ?? {}),
+      ...(normalizedDebug ?? {}),
+      ...(normalizedDebugNested ?? {}),
       ...(responseDebug ?? {}),
+      resolvedRequest: firstDefined(
+        responseDebug?.resolvedRequest,
+        responseDebug?.resolved_request,
+        normalizedDebug?.resolvedRequest,
+        normalizedDebug?.resolved_request,
+        normalizedDebugNested?.resolvedRequest,
+        normalizedDebugNested?.resolved_request,
+        normalizedCoreDebug?.resolvedRequest,
+        normalizedCoreDebug?.resolved_request,
+        normalized.resolvedRequest,
+        null,
+      ),
+      profilePreAri: firstDefined(
+        responseDebug?.profilePreAri,
+        responseDebug?.profile_pre_ari,
+        normalizedDebug?.profilePreAri,
+        normalizedDebug?.profile_pre_ari,
+        normalizedDebugNested?.profilePreAri,
+        normalizedDebugNested?.profile_pre_ari,
+        normalizedCoreDebug?.profilePreAri,
+        normalizedCoreDebug?.profile_pre_ari,
+        null,
+      ),
+      profileFinal: firstDefined(
+        responseDebug?.profileFinal,
+        responseDebug?.profile_final,
+        normalizedDebug?.profileFinal,
+        normalizedDebug?.profile_final,
+        normalizedDebugNested?.profileFinal,
+        normalizedDebugNested?.profile_final,
+        normalizedCoreDebug?.profileFinal,
+        normalizedCoreDebug?.profile_final,
+        null,
+      ),
+      scoring: firstDefined(
+        responseDebug?.scoring,
+        normalizedDebug?.scoring,
+        normalizedDebugNested?.scoring,
+        normalizedCoreDebug?.scoring,
+        null,
+      ),
+      selectionSummary: firstDefined(
+        responseDebug?.selectionSummary,
+        responseDebug?.selection_summary,
+        normalizedDebug?.selectionSummary,
+        normalizedDebug?.selection_summary,
+        normalizedDebugNested?.selectionSummary,
+        normalizedDebugNested?.selection_summary,
+        normalizedCoreDebug?.selectionSummary,
+        normalizedCoreDebug?.selection_summary,
+        normalized.selectionSummary,
+        null,
+      ),
       topPersona: firstDefined(
         responseDebug?.topPersona,
         responseDebug?.top_persona,
@@ -122,17 +244,18 @@ export function buildRoomFallbackFromRow(
     return null;
   }
 
-  const title = row.primaryOfferName?.trim();
-  if (!title) {
+  const title = formatPrimaryOfferName(row);
+  if (!title || title === "-") {
     return null;
   }
 
   const total = row.primaryOfferTotal ?? row.primaryOfferTotalPrice ?? null;
-  const roomTypeId = row.primaryOfferRoomTypeName?.trim() || title;
+  const roomType = row.primaryOfferRoomTypeName?.trim() || row.primaryOfferName?.trim() || title;
+  const roomTypeId = row.primaryOfferRoomTypeName?.trim() || roomType;
   const ratePlan = row.primaryOfferRatePlanName?.trim() || "-";
 
   return {
-    roomType: title,
+    roomType,
     ratePlan,
     nightlyPrice: null,
     totalPrice: total,

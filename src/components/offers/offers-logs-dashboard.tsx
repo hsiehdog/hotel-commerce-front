@@ -25,6 +25,7 @@ import { DebugPanel } from "./dashboard/debug-panel";
 import {
   buildRoomFallbackFromRow,
   formatBasicOfferDetails,
+  formatPrimaryOfferName,
   formatPrimaryOfferTotal,
   formatPropertyLabel,
   mapDetailToParsedOffersResponse,
@@ -311,7 +312,7 @@ export function OffersLogsDashboard() {
                         adults: row.adults ?? null,
                         children: row.children ?? null,
                       };
-                      const primaryName = row.primaryOfferName ?? "-";
+                      const primaryName = formatPrimaryOfferName(row);
                       const primaryTotal = row.primaryOfferTotal ?? row.primaryOfferTotalPrice ?? null;
                       const createdOutboxState = row.createdOutbox?.state ?? row.createdEventOutboxState;
                       return (
