@@ -2,16 +2,15 @@
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ParsedOfferCard } from "@/lib/offers-demo";
-import { cn, formatMoney, toStringArray } from "./utils";
+import { RecommendedRoom } from "@/lib/offers-demo";
+import { formatMoney } from "./utils";
 
 type DecisionOfferCardProps = {
   title: string;
-  offer: ParsedOfferCard | null;
-  highlighted: boolean;
+  offer: RecommendedRoom | null;
 };
 
-export function DecisionOfferCard({ title, offer, highlighted }: DecisionOfferCardProps) {
+export function DecisionOfferCard({ title, offer }: DecisionOfferCardProps) {
   if (!offer) {
     return (
       <Card className="gap-3 py-4">
@@ -19,131 +18,75 @@ export function DecisionOfferCard({ title, offer, highlighted }: DecisionOfferCa
           <CardTitle className="text-base">{title}</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">No offer available.</p>
+          <p className="text-sm text-muted-foreground">No recommendation returned.</p>
         </CardContent>
       </Card>
     );
   }
 
-  const tier = offer.recommended ? "Recommended" : "Alternative";
-  const payment = normalizePayment(offer.paymentSummary);
-  const enhancements = toEnhancementLabels(offer.enhancements);
-  const disclosures = toStringArray(offer.disclosures);
-  const totalForDisplay = offer.pricingBreakdown.total ?? offer.totalPrice;
-
   return (
-    <Card className={cn(highlighted && "border-emerald-300/70 bg-emerald-50/60 dark:bg-emerald-950/30")}>
+    <Card className="border-emerald-300/70 bg-emerald-50/60 dark:bg-emerald-950/30">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg">{title}</CardTitle>
-          <Badge className={offer.recommended ? "bg-emerald-600 hover:bg-emerald-700" : "bg-slate-600"}>{tier}</Badge>
+          <Badge className="bg-emerald-600 hover:bg-emerald-700">Recommended</Badge>
         </div>
         <CardDescription className="text-xs">
-          {offer.room} | {offer.ratePlan}
+          {offer.roomType} | {offer.ratePlan}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 text-sm">
         <div className="rounded-md border bg-muted/20 p-3">
           <div className="flex items-baseline justify-between border-b border-dashed pb-2">
             <span className="text-xs font-medium text-muted-foreground">Total Price</span>
-            <span className="text-lg font-bold text-primary">{formatMoney(totalForDisplay)}</span>
+            <span className="text-lg font-bold text-primary">{formatMoney(offer.totalPrice)}</span>
           </div>
           <div className="mt-2 space-y-1 text-xs text-muted-foreground">
-            <div className="flex justify-between">
-              <span>Base price</span>
-              <span className="font-mono">{formatMoney(offer.pricingBreakdown.subtotal)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Taxes & fees</span>
-              <span className="font-mono">{formatMoney(offer.pricingBreakdown.taxesFees)}</span>
-            </div>
-            {offer.pricingBreakdown.fees.length > 0 ? (
-              offer.pricingBreakdown.fees.map((fee) => (
-                <div key={`${offer.offerId}-${fee.label}`} className="flex justify-between">
-                  <span>{fee.label}</span>
-                  <span className="font-mono">{formatMoney(fee.amount)}</span>
-                </div>
-              ))
-            ) : (
-              offer.pricingBreakdown.addOns !== null && offer.pricingBreakdown.addOns > 0 && (
-                <div className="flex justify-between">
-                  <span>Included fees</span>
-                  <span className="font-mono">{formatMoney(offer.pricingBreakdown.addOns)}</span>
-                </div>
-              )
-            )}
+            {buildBreakdownRows(offer).map((row) => (
+              <div key={`${offer.roomTypeId}-${row.label}`} className="flex justify-between">
+                <span>{row.label}</span>
+                <span className="font-mono">{formatMoney(row.amount)}</span>
+              </div>
+            ))}
           </div>
         </div>
 
-        {enhancements.length > 0 && (
+        {offer.reasons.length > 0 ? (
           <div>
-            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Enhancements</p>
-            <div className="flex flex-wrap gap-1">
-              {enhancements.map((enhancement) => (
-                <Badge key={`${offer.offerId}-${enhancement}`} variant="outline" className="text-xs font-normal">
-                  {enhancement}
-                </Badge>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <div>
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Payment</p>
-          <p className="text-xs text-foreground">{payment}</p>
-        </div>
-
-        <div>
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Cancellation Policy</p>
-          <p className="text-xs text-foreground">{offer.cancellationSummary}</p>
-        </div>
-
-        {disclosures.length > 0 && (
-          <div>
-            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Disclosures</p>
-            <ul className="list-disc pl-4 text-xs text-muted-foreground">
-              {disclosures.map((line) => (
-                <li key={`${offer.offerId}-${line}`}>{line}</li>
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Why this room</p>
+            <ul className="list-disc pl-4 text-xs text-foreground">
+              {offer.reasons.map((reason) => (
+                <li key={`${offer.roomTypeId}-${reason}`}>{reason}</li>
               ))}
             </ul>
           </div>
-        )}
+        ) : null}
+
+        <div>
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Policy</p>
+          <p className="text-xs text-foreground">{offer.policySummary || "-"}</p>
+        </div>
+
+        {offer.inventoryNote ? (
+          <div>
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Inventory</p>
+            <p className="text-xs text-foreground">{offer.inventoryNote}</p>
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   );
 }
 
-function normalizePayment(value: string): string {
-  const lower = value.toLowerCase();
-  if (lower.includes("property") || lower.includes("hotel")) {
-    return "Pay at property";
-  }
-  if (lower.includes("now") || lower.includes("prepay")) {
-    return "Pay now";
-  }
-  return value;
-}
+function buildBreakdownRows(offer: RecommendedRoom): Array<{ label: string; amount: number }> {
+  const rows: Array<{ label: string; amount: number | null }> = [
+    { label: "Subtotal", amount: offer.pricingBreakdown.subtotal },
+    { label: "Taxes & fees", amount: offer.pricingBreakdown.taxesAndFees },
+  ];
 
-function toEnhancementLabels(value: unknown): string[] {
-  if (!Array.isArray(value)) {
-    return [];
+  for (const fee of offer.pricingBreakdown.includedFees) {
+    rows.push({ label: fee.label, amount: fee.amount });
   }
 
-  return value
-    .map((item) => {
-      if (typeof item === "string") {
-        return item;
-      }
-      if (item && typeof item === "object") {
-        const record = item as Record<string, unknown>;
-        if (typeof record.name === "string" && record.name.trim()) {
-          return record.name;
-        }
-        if (typeof record.id === "string" && record.id.trim()) {
-          return record.id;
-        }
-      }
-      return "";
-    })
-    .filter(Boolean);
+  return rows.filter((row): row is { label: string; amount: number } => row.amount !== null && row.amount > 0);
 }

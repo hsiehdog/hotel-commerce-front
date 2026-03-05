@@ -14,12 +14,17 @@ describe("GuestProfile", () => {
           margin: 0,
           risk: 0.13,
         }}
-        profileFinal={{ tripType: "solo", decisionPosture: "price" }}
-        profilePreAri={{ tripType: "solo", decisionPosture: "price" }}
+        personaConfidence={{
+          solo_business_traveler: 0.8805,
+          weekend_couple: 0.0103,
+        }}
       />,
     );
 
     expect(screen.getByText("User Profile")).toBeTruthy();
+    expect(screen.getByText("Personas")).toBeTruthy();
+    expect(screen.getByText("Solo Business Traveler")).toBeTruthy();
+    expect(screen.getByText("88.05%")).toBeTruthy();
     expect(screen.getByText("Weights")).toBeTruthy();
 
     expect(screen.getByText(/Value:/)).toBeTruthy();

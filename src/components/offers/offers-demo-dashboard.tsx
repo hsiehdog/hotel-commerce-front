@@ -5,21 +5,15 @@ import {
   OffersDraft,
   OffersRequestError,
   ParsedOffersResponse,
-  buildDeltaLine,
   buildOffersGenerateRequest,
   getDefaultOffersDraft,
-  getPrimaryOffer,
-  getSecondaryOffer,
-  groupReasonCodes,
   parseAdvancedJson,
   parseOffersResponse,
   requestOfferGeneration,
   scenarioPresets,
   validateOffersDraft,
 } from "@/lib/offers-demo";
-import {
-  buildEffectiveConfigRows,
-} from "./dashboard/dashboard-logic";
+import { buildEffectiveConfigRows } from "./dashboard/dashboard-logic";
 import { RequestForm } from "./dashboard/request-form";
 import { DecisionSummary } from "./dashboard/decision-summary";
 import { GuestProfile } from "./dashboard/guest-profile";
@@ -45,19 +39,10 @@ export function OffersDemoDashboard() {
     [advancedJson.data, draft],
   );
 
-  const primaryOffer = parsedResponse ? getPrimaryOffer(parsedResponse.offers) : null;
-  const secondaryOffer = parsedResponse ? getSecondaryOffer(parsedResponse.offers) : null;
-  const deltaLine = buildDeltaLine(primaryOffer, secondaryOffer);
-  const reasonGroups = groupReasonCodes(parsedResponse?.reasonCodes ?? []);
-
-  const profilePreAri = useMemo(() => asRecord(parsedResponse?.debug.profilePreAri), [parsedResponse]);
-  const profileFinal = useMemo(() => asRecord(parsedResponse?.debug.profileFinal), [parsedResponse]);
   const scoringWeights = useMemo(
     () => asRecord(asRecord(parsedResponse?.debug.scoring).weights),
     [parsedResponse],
   );
-
-  const allCandidates = parsedResponse?.debug.topCandidates ?? [];
 
   const effectiveConfigRows = useMemo(
     () => buildEffectiveConfigRows(parsedResponse, requestPayload),
@@ -82,7 +67,6 @@ export function OffersDemoDashboard() {
     try {
       const response = await requestOfferGeneration(payload);
       const parsed = parseOffersResponse(response);
-
       setParsedResponse(parsed);
       setRawResponse(response);
     } catch (error) {
@@ -118,7 +102,6 @@ export function OffersDemoDashboard() {
 
   return (
     <div className="grid gap-6 lg:grid-cols-[380px_1fr] xl:grid-cols-[420px_1fr]">
-      {/* Sticky Left Column */}
       <div className="h-fit lg:sticky lg:top-6">
         <RequestForm
           draft={draft}
@@ -139,7 +122,6 @@ export function OffersDemoDashboard() {
         />
       </div>
 
-      {/* Scrollable Right Column */}
       <div className="min-w-0 space-y-6 pb-20">
         {!parsedResponse ? (
           <Card className="border-dashed">
@@ -152,24 +134,21 @@ export function OffersDemoDashboard() {
           <>
             <div id="selection" className="scroll-mt-24">
               <DecisionSummary
-                primaryOffer={primaryOffer}
-                secondaryOffer={secondaryOffer}
-                deltaLine={deltaLine}
+                recommendedRoom={parsedResponse.recommendedRoom}
+                recommendedOffers={parsedResponse.recommendedOffers}
+                fallback={parsedResponse.fallback}
               />
             </div>
 
             <div id="profile" className="scroll-mt-24">
-               <GuestProfile 
-                  scoringWeights={scoringWeights}
-                  profileFinal={profileFinal}
-                  profilePreAri={profilePreAri}
-               />
+              <GuestProfile
+                scoringWeights={scoringWeights}
+                personaConfidence={parsedResponse.personaConfidence}
+              />
             </div>
 
             <div id="funnel" className="scroll-mt-24">
               <CandidateAnalysis
-                displayedCandidates={allCandidates}
-                scoringWeights={scoringWeights}
                 expandedCandidate={expandedCandidate}
                 setExpandedCandidate={setExpandedCandidate}
                 parsedResponse={parsedResponse}
@@ -181,9 +160,7 @@ export function OffersDemoDashboard() {
                 parsedResponse={parsedResponse}
                 requestPayload={requestPayload}
                 rawResponse={rawResponse}
-                allCandidates={allCandidates}
                 effectiveConfigRows={effectiveConfigRows}
-                reasonGroups={reasonGroups}
               />
             </div>
           </>

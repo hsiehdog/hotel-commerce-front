@@ -3,33 +3,25 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { ParsedOffersResponse } from "@/lib/offers-demo";
 import { safeStringify } from "./utils";
 
-type DebugTab = "summary" | "reason-codes" | "raw-json" | "all-candidates" | "context";
+type DebugTab = "summary" | "raw-json" | "ranked-rooms" | "context";
 
 interface DebugPanelProps {
   parsedResponse: ParsedOffersResponse;
   requestPayload: Record<string, unknown> | null;
   rawResponse: unknown;
-  allCandidates: unknown[];
   effectiveConfigRows: Array<{ label: string; value: string; source: string; impact: string }>;
-  reasonGroups: {
-    filters: string[];
-    selection: string[];
-    fallback: string[];
-    other: string[];
-  };
+  showRawJson?: boolean;
 }
 
 export function DebugPanel({
   parsedResponse,
   requestPayload,
   rawResponse,
-  allCandidates,
   effectiveConfigRows,
-  reasonGroups,
+  showRawJson = true,
 }: DebugPanelProps) {
   const [activeDebugTab, setActiveDebugTab] = useState<DebugTab>("summary");
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
@@ -46,7 +38,7 @@ export function DebugPanel({
   }
 
   function downloadDecisionReport() {
-    if (!parsedResponse || !requestPayload || !rawResponse) {
+    if (!requestPayload || !rawResponse) {
       return;
     }
 
@@ -57,9 +49,9 @@ export function DebugPanel({
         propertyId: parsedResponse.propertyId,
         currency: parsedResponse.currency,
         priceBasisUsed: parsedResponse.priceBasisUsed,
-        reasonCodes: parsedResponse.reasonCodes,
+        hasRecommendation: Boolean(parsedResponse.recommendedRoom),
+        rankedRooms: parsedResponse.rankedRooms.length,
       },
-      decisionTrace: parsedResponse.decisionTrace,
       response: rawResponse,
     };
 
@@ -77,49 +69,52 @@ export function DebugPanel({
   const tabs: Array<{ id: DebugTab; label: string }> = [
     { id: "summary", label: "Overview" },
     { id: "context", label: "Context" },
-    { id: "reason-codes", label: "Reason Codes" },
-    { id: "raw-json", label: "Raw JSON" },
-    { id: "all-candidates", label: "All Candidates" },
+    { id: "ranked-rooms", label: "Ranked Rooms" },
   ];
+  if (showRawJson) {
+    tabs.splice(2, 0, { id: "raw-json", label: "Raw JSON" });
+  }
 
   return (
     <Card>
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-             <CardTitle className="text-base">Audit Trail</CardTitle>
-             <CardDescription>Deep dive into the decision context and raw payloads.</CardDescription>
+            <CardTitle className="text-base">Audit Trail</CardTitle>
+            <CardDescription>Deep dive into the decision context and raw payloads.</CardDescription>
           </div>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => requestPayload && copyJson("Request", requestPayload)}
-              disabled={!requestPayload}
-            >
-              Copy Req
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => rawResponse && copyJson("Response", rawResponse)}
-              disabled={!rawResponse}
-            >
-              Copy Res
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={downloadDecisionReport}
-              disabled={!rawResponse}
-            >
-              Download
-            </Button>
-          </div>
+          {showRawJson ? (
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => requestPayload && copyJson("Request", requestPayload)}
+                disabled={!requestPayload}
+              >
+                Copy Req
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => rawResponse && copyJson("Response", rawResponse)}
+                disabled={!rawResponse}
+              >
+                Copy Res
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={downloadDecisionReport}
+                disabled={!rawResponse}
+              >
+                Download
+              </Button>
+            </div>
+          ) : null}
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {copyMessage && <p className="text-xs text-emerald-600 font-medium">{copyMessage}</p>}
+        {copyMessage ? <p className="text-xs font-medium text-emerald-600">{copyMessage}</p> : null}
 
         <div className="flex flex-wrap gap-2 border-b pb-4">
           {tabs.map((tab) => (
@@ -137,93 +132,55 @@ export function DebugPanel({
         </div>
 
         <div className="min-h-[300px]">
-          {activeDebugTab === "summary" && (
-            <div className="space-y-4 text-sm">
-              <div className="grid gap-2 sm:grid-cols-2">
-                <div className="rounded border p-3">
-                  <span className="text-xs text-muted-foreground">Property</span>
-                  <p className="font-medium">{parsedResponse.propertyId}</p>
-                </div>
-                <div className="rounded border p-3">
-                  <span className="text-xs text-muted-foreground">Currency</span>
-                  <p className="font-medium">{parsedResponse.currency}</p>
-                </div>
-                 <div className="rounded border p-3">
-                  <span className="text-xs text-muted-foreground">Price Basis</span>
-                  <p className="font-medium">{parsedResponse.priceBasisUsed}</p>
-                </div>
-                <div className="rounded border p-3">
-                  <span className="text-xs text-muted-foreground">Config Version</span>
-                  <p className="font-medium">{parsedResponse.configVersion}</p>
-                </div>
+          {activeDebugTab === "summary" ? (
+            <div className="grid gap-2 text-sm sm:grid-cols-2">
+              <StatTile label="Property" value={parsedResponse.propertyId} />
+              <StatTile label="Currency" value={parsedResponse.currency} />
+              <StatTile label="Price Basis" value={parsedResponse.priceBasisUsed} />
+              <StatTile label="Config Version" value={parsedResponse.configVersion} />
+              <StatTile label="Recommended Room" value={parsedResponse.recommendedRoom?.roomType || "none"} />
+              <StatTile label="Fallback" value={parsedResponse.fallback?.type || "none"} />
+            </div>
+          ) : null}
+
+          {activeDebugTab === "context" ? (
+            <div className="rounded-md border p-3">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Effective Config</p>
+              <div className="space-y-2 text-sm">
+                {effectiveConfigRows.map((row) => (
+                  <div key={`${row.label}-${row.source}`} className="flex justify-between border-b border-dashed pb-1 last:border-0">
+                    <span>{row.label}</span>
+                    <div className="text-right">
+                      <span className="font-medium">{row.value}</span>
+                      <span className="ml-2 text-xs text-muted-foreground">({row.source})</span>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
-          )}
+          ) : null}
 
-          {activeDebugTab === "context" && (
-             <div className="space-y-4">
-                <div className="rounded-md border p-3">
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Effective Config</p>
-                  <div className="space-y-2 text-sm">
-                    {effectiveConfigRows.map((row) => (
-                      <div key={`${row.label}-${row.source}`} className="flex justify-between border-b border-dashed pb-1 last:border-0">
-                        <span>{row.label}</span>
-                        <div className="text-right">
-                          <span className="font-medium">{row.value}</span>
-                          <span className="ml-2 text-xs text-muted-foreground">({row.source})</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                   <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Policies</p>
-                   {parsedResponse.propertyContext.policies.length > 0 ? (
-                      <div className="flex flex-wrap gap-2">
-                         {parsedResponse.propertyContext.policies.map(p => <Badge key={p} variant="outline">{p}</Badge>)}
-                      </div>
-                   ) : <p className="text-xs text-muted-foreground">No policies returned.</p>}
-                </div>
-             </div>
-          )}
-
-          {activeDebugTab === "reason-codes" && (
-            <div className="space-y-6">
-              <ReasonGroup label="Filters" codes={reasonGroups.filters} />
-              <ReasonGroup label="Selection" codes={reasonGroups.selection} />
-              <ReasonGroup label="Fallback" codes={reasonGroups.fallback} />
-              <ReasonGroup label="Other" codes={reasonGroups.other} />
-            </div>
-          )}
-
-          {activeDebugTab === "raw-json" && (
+          {showRawJson && activeDebugTab === "raw-json" ? (
             <div className="grid gap-4 xl:grid-cols-2">
               <JsonPanel title="Request" value={requestPayload} />
               <JsonPanel title="Response" value={rawResponse} />
             </div>
-          )}
+          ) : null}
 
-          {activeDebugTab === "all-candidates" && (
-            <JsonPanel title="debug.topCandidates" value={allCandidates} />
-          )}
+          {activeDebugTab === "ranked-rooms" ? (
+            <JsonPanel title="ranked_rooms" value={parsedResponse.rankedRooms} />
+          ) : null}
         </div>
       </CardContent>
     </Card>
   );
 }
 
-function ReasonGroup({ label, codes }: { label: string; codes: string[] }) {
+function StatTile({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
-      <div className="flex flex-wrap gap-2">
-        {codes.map((code) => (
-          <Badge key={`${label}-${code}`} variant="secondary" className="font-mono text-[10px]">
-            {code}
-          </Badge>
-        ))}
-        {codes.length === 0 && <span className="text-xs text-muted-foreground italic">None</span>}
-      </div>
+    <div className="rounded border p-3">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <p className="font-medium">{value}</p>
     </div>
   );
 }

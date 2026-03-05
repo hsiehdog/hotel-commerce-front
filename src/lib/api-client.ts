@@ -269,10 +269,10 @@ export type OffersLogsDetailResponse = {
     rooms?: number | null;
     currency?: string | null;
     priceBasisUsed?: string | null;
-    primaryOfferType?: string | null;
+    topPersona?: string | null;
     fallbackActionType?: string | null;
-    offersCount: number;
-    decisionStatus: OffersLogDecisionStatus;
+    recommendedOfferCount: number;
+    decisionStatus: "OK" | "NO_OFFERS" | "ERROR";
     reasonCodes: string[];
     truncated: boolean;
     httpStatus?: number | null;
@@ -295,12 +295,12 @@ export type OffersLogsDetailResponse = {
   normalizationWarnings?: string[];
   events: OffersLogDetailEvent[];
   normalized: {
-    reasonDetailsVersion: number;
-    globalReasonCodes: string[];
+    reasonDetailsVersion?: number;
+    globalReasonCodes?: string[];
     selectionSummary?: string | null;
     reasonDetails?: unknown;
     reasonsByOfferId?: Record<string, string[]> | null;
-    presentedOffers: OffersLogPresentedOffer[];
+    presentedOffers?: OffersLogPresentedOffer[];
     topCandidates?: OffersLogTopCandidate[] | null;
     guardrails?: {
       rules?: Array<{
@@ -319,7 +319,7 @@ export type OffersLogsDetailResponse = {
     payloadTruncatedForResponse?: boolean;
   };
   generateResponse?: {
-    data?: Record<string, unknown>;
+    data?: Record<string, unknown> | null;
   } | null;
 };
 
@@ -504,29 +504,6 @@ function firstNumber(...values: unknown[]): number | undefined {
   return undefined;
 }
 
-function normalizeLabel(value: string): string {
-  const withSpaces = value
-    .replace(/([a-z])([A-Z])/g, "$1 $2")
-    .replace(/[_-]+/g, " ")
-    .trim();
-  if (!withSpaces) {
-    return "";
-  }
-  return withSpaces
-    .split(/\s+/)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(" ");
-}
-
-function toTitleCase(value: string): string {
-  return value
-    .toLowerCase()
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
-}
-
 function toStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) {
     return [];
@@ -554,180 +531,98 @@ function parseAuditOutboxState(value: unknown): AuditOutboxState | null {
   return null;
 }
 
-function looksGenericOfferName(value: string): boolean {
-  return /^offer\s*\d+$/i.test(value.trim());
+function extractChatRecommendationSource(data: ChatMessageResponse["data"]): Record<string, unknown> | null {
+  const commerce = isRecord(data.commerce) ? data.commerce : {};
+  const commerceData = isRecord(commerce.data) ? commerce.data : commerce;
+  const responseData = isRecord((data as Record<string, unknown>).data)
+    ? ((data as Record<string, unknown>).data as Record<string, unknown>)
+    : {};
+
+  if (isRecord(commerceData.recommended_room) || Array.isArray(commerceData.ranked_rooms)) {
+    return commerceData;
+  }
+
+  if (isRecord(responseData.recommended_room) || Array.isArray(responseData.ranked_rooms)) {
+    return responseData;
+  }
+
+  return null;
 }
 
-function normalizeChatOffer(rawOffer: unknown, fallbackIndex: number): ChatOffer {
-  const offer = isRecord(rawOffer) ? rawOffer : {};
-  const roomType = isRecord(offer.roomType) ? offer.roomType : {};
-  const ratePlan = isRecord(offer.ratePlan) ? offer.ratePlan : {};
-  const price = isRecord(offer.price) ? offer.price : {};
-  const pricing = isRecord(offer.pricing) ? offer.pricing : {};
-  const breakdown = isRecord(pricing.breakdown) ? pricing.breakdown : {};
-  const includedFees = isRecord(breakdown.includedFees) ? breakdown.includedFees : {};
-
-  const currency =
-    firstString(price.currency, pricing.currency, offer.currency) ?? "USD";
-  const subtotal =
-    firstNumber(price.subtotal, breakdown.baseRateSubtotal, breakdown.subtotal, pricing.subtotal) ?? 0;
-  const taxesAndFees =
-    firstNumber(price.taxes_and_fees, breakdown.taxesAndFees, pricing.taxesAndFees) ?? 0;
-  const addOnsTotal =
-    firstNumber(
-      price.add_ons_total,
-      breakdown.addOnsTotal,
-      includedFees.totalIncludedFees,
-      includedFees.total_included_fees,
-    ) ?? 0;
-  const total =
-    firstNumber(price.total, pricing.total, subtotal + taxesAndFees + addOnsTotal) ?? 0;
-  const totalWithAddOns =
-    firstNumber(price.total_with_add_ons, pricing.totalWithAddOns) ??
-    (addOnsTotal > 0 ? total : undefined);
-
-  const rateTypeRaw = firstString(
-    offer.rate_type,
-    offer.rateType,
-    offer.refundability,
-    offer.type,
-  );
-  const rateType: ChatOffer["rate_type"] =
-    rateTypeRaw === "non_refundable" ||
-    rateTypeRaw?.toLowerCase().includes("non") ||
-    rateTypeRaw?.toLowerCase().includes("no_refund")
-      ? "non_refundable"
-      : "flexible";
-
-  const feeBreakdown = Object.entries(includedFees)
-    .filter(([key, value]) => {
-      const lowerKey = key.toLowerCase();
-      if (
-        lowerKey.includes("totalincludedfees") ||
-        lowerKey.includes("total_included_fees") ||
-        lowerKey.includes("pernight") ||
-        lowerKey.includes("per_night") ||
-        lowerKey === "nights" ||
-        lowerKey.includes("addon")
-      ) {
-        return false;
-      }
-      return typeof value === "number" && Number.isFinite(value) && value > 0;
-    })
-    .map(([key, value]) => ({
-      label: normalizeLabel(
-        key
-          .replace(/total$/i, "")
-          .replace(/_total$/i, ""),
-      ),
-      amount: Number(value),
-    }));
-
-  const enhancements = toStringArray(offer.enhancements);
-  const disclosures = toStringArray(offer.disclosures);
-  const rateLabelRaw =
-    firstString(
-      offer.ratePlanName,
-      offer.rate_plan_name,
-      ratePlan.name,
-      ratePlan.id,
-      offer.ratePlan,
-      offer.rate_plan,
-      offer.rate_type,
-    ) ?? rateType;
-
-  const normalizedRateLabel =
-    rateLabelRaw.toLowerCase() === "flexible"
-      ? "Flexible"
-      : rateLabelRaw.toLowerCase() === "non_refundable"
-        ? "Non-refundable"
-        : toTitleCase(rateLabelRaw);
-
-  const paymentPolicy =
-    firstString(
-      offer.payment_policy,
-      offer.paymentTiming,
-      offer.payment_timing,
-    ) ??
-    (rateType === "non_refundable" ? "Pay now" : "Pay at property");
-
-  const cancellationPolicy =
-    firstString(
-      offer.cancellation_policy,
-      offer.cancellationSummary,
-      offer.policySummary,
-      offer.cancellation_policy_summary,
-    ) ??
-    (rateType === "non_refundable"
-      ? "This rate is non-refundable."
-      : "You can cancel for free up to a day before check-in.");
-
-  const preferredName = firstString(
-    offer.roomTypeName,
-    offer.room_type_name,
-    roomType.name,
-    roomType.id,
-    offer.roomType,
-    offer.room_type,
-    offer.optionTitle,
-    offer.offerName,
-    offer.name,
-  );
-  const normalizedName =
-    preferredName && !looksGenericOfferName(preferredName)
-      ? preferredName
-      : firstString(
-          offer.roomTypeName,
-          offer.room_type_name,
-          roomType.name,
-          roomType.id,
-          offer.roomType,
-          offer.room_type,
-          offer.offerName,
-          offer.name,
-        );
+function normalizeRecommendedRoomToChatOffer(
+  raw: Record<string, unknown>,
+  currencyFallback: string,
+): ChatOffer {
+  const total = firstNumber(raw.total_price) ?? 0;
+  const nightly = firstNumber(raw.nightly_price) ?? total;
+  const ratePlan = firstString(raw.rate_plan) ?? "Flexible";
+  const policy = firstString(raw.policy_summary) ?? "Offer details available.";
 
   return {
-    id: firstString(offer.id, offer.offerId, offer.offer_id) ?? `offer-${fallbackIndex + 1}`,
-    name:
-      normalizedName ??
-      firstString(offer.ratePlanName, offer.rate_plan_name, ratePlan.name, ratePlan.id) ??
-      `Offer ${fallbackIndex + 1}`,
-    description:
-      firstString(
-        offer.description,
-        offer.summary,
-        offer.roomTypeDescription,
-        offer.room_type_description,
-      ) ?? "Offer details available.",
-    rate_type: rateType,
-    rate_label: normalizedRateLabel,
-    cancellation_policy: cancellationPolicy,
-    payment_policy: paymentPolicy,
-    enhancements,
-    disclosures,
-    fee_breakdown: feeBreakdown,
+    id: firstString(raw.rate_plan_id, raw.room_type_id) ?? "recommended-room",
+    name: firstString(raw.room_type) ?? "Recommended room",
+    description: [ratePlan, firstString(raw.inventory_note)].filter(Boolean).join(" | "),
+    rate_type: "flexible",
+    rate_label: ratePlan,
+    cancellation_policy: policy,
+    payment_policy: "Pay at property",
+    enhancements: [],
+    disclosures: [],
+    fee_breakdown: [],
     price: {
-      currency,
-      per_night:
-        firstNumber(price.per_night, price.perNight, pricing.perNight) ?? 0,
-      subtotal,
-      taxes_and_fees: taxesAndFees,
+      currency: currencyFallback,
+      per_night: nightly,
+      subtotal: total,
+      taxes_and_fees: 0,
       total,
-      add_ons_total: addOnsTotal > 0 ? addOnsTotal : undefined,
-      total_with_add_ons: totalWithAddOns,
+    },
+  };
+}
+
+function normalizeRankedRoomToChatOffer(
+  raw: Record<string, unknown>,
+  currencyFallback: string,
+): ChatOffer {
+  const total = firstNumber(raw.price) ?? 0;
+  const name = firstString(raw.room_type_name, raw.room_type_id) ?? "Recommended room";
+  const ratePlanId = firstString(raw.rate_plan_id) ?? "rate-plan";
+  const reasons = toStringArray(raw.reasons).join(" | ");
+
+  return {
+    id: firstString(raw.rate_plan_id, raw.room_type_id) ?? "ranked-room",
+    name,
+    description: [ratePlanId, reasons].filter(Boolean).join(" | "),
+    rate_type: "flexible",
+    rate_label: ratePlanId,
+    cancellation_policy: "Offer details available.",
+    payment_policy: "Pay at property",
+    enhancements: [],
+    disclosures: [],
+    fee_breakdown: [],
+    price: {
+      currency: currencyFallback,
+      per_night: total,
+      subtotal: total,
+      taxes_and_fees: 0,
+      total,
     },
   };
 }
 
 export function getChatOffersFromResponse(data: ChatMessageResponse["data"]): ChatOffer[] {
-  const commerceOffers = data.commerce?.offers;
-  if (Array.isArray(commerceOffers) && commerceOffers.length > 0) {
-    return commerceOffers.map((entry, index) => normalizeChatOffer(entry, index));
+  const source = extractChatRecommendationSource(data);
+  if (!source) {
+    return [];
   }
 
-  if (Array.isArray(data.offers) && data.offers.length > 0) {
-    return data.offers.map((entry, index) => normalizeChatOffer(entry, index));
+  const currency = firstString(source.currency) ?? "USD";
+
+  if (isRecord(source.recommended_room)) {
+    return [normalizeRecommendedRoomToChatOffer(source.recommended_room, currency)];
+  }
+
+  if (Array.isArray(source.ranked_rooms) && isRecord(source.ranked_rooms[0])) {
+    return [normalizeRankedRoomToChatOffer(source.ranked_rooms[0], currency)];
   }
 
   return [];
@@ -842,86 +737,28 @@ export async function sendChatSessionMessage(
     return {
       sessionId,
       assistantMessage:
-        "Thanks. I can help with that request. Here are two mock offers you can inspect.",
+        "Thanks. I found one recommended room for your request.",
       status: "OK",
       nextAction: "PRESENT_OFFERS",
       slots: {},
       commerce: {
-        offers: [
-          {
-            id: "offer-1",
-            name: "Deluxe Flexible",
-            description: "King room with breakfast included.",
-            rate_type: "flexible",
-            cancellation_policy: "Free cancellation until 24h before check-in.",
-            payment_policy: "Pay at property",
-            pricing: {
-              currency: "USD",
-              perNight: 189,
-              total: 440,
-              breakdown: {
-                baseRateSubtotal: 378,
-                taxesAndFees: 62,
-                includedFees: {
-                  totalIncludedFees: 0,
-                },
-              },
-            },
-          },
-          {
-            id: "offer-2",
-            name: "Saver Non-refundable",
-            description: "Best value room-only rate.",
-            rate_type: "non_refundable",
-            cancellation_policy: "Non-refundable after booking.",
-            payment_policy: "Pay now",
-            pricing: {
-              currency: "USD",
-              perNight: 162,
-              total: 380,
-              breakdown: {
-                baseRateSubtotal: 324,
-                taxesAndFees: 56,
-                includedFees: {
-                  totalIncludedFees: 0,
-                },
-              },
-            },
-          },
-        ],
+        currency: "USD",
+        recommended_room: {
+          room_type: "Deluxe King",
+          rate_plan: "Flexible Rate",
+          nightly_price: 189,
+          total_price: 440,
+          score: 0.88,
+          reasons: ["Strong fit for party size", "Good relative value"],
+          policy_summary: "Refundable rate with flexible cancellation.",
+          inventory_note: "Only 2 left at this rate.",
+          room_type_id: "rt_deluxe_king",
+          rate_plan_id: "rp_flex",
+        },
+        recommended_offers: [],
+        ranked_rooms: [],
+        fallback: null,
       },
-      offers: [
-        {
-          id: "offer-1",
-          name: "Deluxe Flexible",
-          description: "King room with breakfast included.",
-          rate_type: "flexible",
-          cancellation_policy: "Free cancellation until 24h before check-in.",
-          payment_policy: "Pay at property",
-          price: {
-            currency: "USD",
-            per_night: 189,
-            subtotal: 378,
-            taxes_and_fees: 62,
-            total: 440,
-          },
-        },
-        {
-          id: "offer-2",
-          name: "Saver Non-refundable",
-          description: "Best value room-only rate.",
-          rate_type: "non_refundable",
-          cancellation_policy: "Non-refundable after booking.",
-          payment_policy: "Pay now",
-          price: {
-            currency: "USD",
-            per_night: 162,
-            subtotal: 324,
-            taxes_and_fees: 56,
-            total: 380,
-          },
-        },
-      ],
       decisionId: `mock-decision-${input.clientMessageId}`,
     };
   }

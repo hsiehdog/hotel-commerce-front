@@ -3,8 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   buildOffersGenerateRequest,
   getDefaultOffersDraft,
-  getSecondaryOffer,
-  groupReasonCodes,
   parseAdvancedJson,
   parseOffersResponse,
   validateOffersDraft,
@@ -15,18 +13,17 @@ describe("offers demo request builder", () => {
     const draft = {
       ...getDefaultOffersDraft(),
       property_id: "hotel-test-1",
-      channel: "web" as const,
+      channel: "chat" as const,
       check_in: "2026-03-10",
       check_out: "2026-03-12",
       nights: "2",
       rooms: "1",
       adults: "2",
-      children: "1",
-      child_ages: [9],
-      roomOccupancies: [{ adults: 2, children: 1 }],
+      children: "0",
+      child_ages: [],
+      roomOccupancies: [{ adults: 2, children: 0 }],
       pet_friendly: true,
       accessible_room: true,
-      needs_two_beds: false,
       parking_needed: true,
       currency: "usd",
       stub_scenario: "family_space_priority",
@@ -37,6 +34,7 @@ describe("offers demo request builder", () => {
     });
 
     expect(payload.property_id).toBe("hotel-test-1");
+    expect(payload.channel).toBe("chat");
     expect(payload.currency).toBe("USD");
     expect(payload.nights).toBe(2);
     expect(payload.market_segment).toBe("family");
@@ -44,9 +42,7 @@ describe("offers demo request builder", () => {
     expect(payload.pet_friendly).toBe(true);
     expect(payload.accessible_room).toBe(true);
     expect(payload.parking_needed).toBe(true);
-    expect(payload).not.toHaveProperty("preferences");
-    expect((payload as Record<string, unknown>).request).toBeUndefined();
-    expect((payload as Record<string, unknown>).payload).toBeUndefined();
+    expect(payload.children).toBeUndefined();
   });
 
   it("validates child age mismatch and invalid JSON", () => {
@@ -75,274 +71,96 @@ describe("offers demo request builder", () => {
 });
 
 describe("offers response parser", () => {
-  it("maps summary, property context, and offer fields", () => {
-    const parsed = parseOffersResponse({
-      property_id: "hotel-9",
-      channel: "agent",
-      currency: "USD",
-      price_basis_used: "LOS",
-      config_version: "v2026.04.1",
-      strategy_mode: "balanced",
-      timezone: "America/New_York",
-      policies: ["ID required", "No smoking"],
-      offers: [
-        {
-          offer_id: "offer-1",
-          offerType: "best_value",
-          isRecommended: true,
-          room_type: "deluxe",
-          roomTypeDescription: "Top floor king",
-          rate_plan: "flex",
-          pricing: { total: 320, paymentType: "pay_now" },
-          cancellationPolicy: { refundable: true },
-        },
-      ],
-      reason_codes: ["filter_inventory", "selection_best_margin", "fallback_waitlist"],
-      debug: {
-        topCandidates: [
-          {
-            offerId: "offer-1",
-            score: 0.92,
-            scoreComponents: { margin: 0.4, conversion: 0.3 },
-            riskContributors: ["high_demand"],
-          },
-        ],
-        profileFinal: {
-          capabilities: {
-            text_link: true,
-            transfer: false,
-          },
-        },
-      },
-    });
-
-    expect(parsed.propertyId).toBe("hotel-9");
-    expect(parsed.priceBasisUsed).toBe("LOS");
-    expect(parsed.configVersion).toBe("v2026.04.1");
-    expect(parsed.propertyContext.strategyMode).toBe("balanced");
-    expect(parsed.propertyContext.timezone).toBe("America/New_York");
-    expect(parsed.propertyContext.policies).toContain("ID required");
-    expect(parsed.propertyContext.capabilities).toContain("text_link: on");
-    expect(parsed.offers[0]?.offerId).toBe("offer-1");
-    expect(parsed.offers[0]?.recommended).toBe(true);
-    expect(parsed.debug.topCandidates[0]?.offerId).toBe("offer-1");
-  });
-
-  it("groups reason codes for why panel", () => {
-    const groups = groupReasonCodes([
-      "filter_inventory",
-      "selection_best_margin",
-      "fallback_waitlist",
-      "misc_note",
-    ]);
-
-    expect(groups.filters).toEqual(["filter_inventory"]);
-    expect(groups.selection).toEqual(["selection_best_margin"]);
-    expect(groups.fallback).toEqual(["fallback_waitlist"]);
-    expect(groups.other).toEqual(["misc_note"]);
-  });
-
-  it("parses wrapped response envelopes", () => {
+  it("maps recommended room, ranked rooms, and upsells", () => {
     const parsed = parseOffersResponse({
       data: {
-        property_id: "hotel-wrapped",
-        decision_trace: ["rule_a", "rule_b"],
-        selected_offers: [
-          {
-            offer_id: "offer-200",
-            recommended: true,
-            room_type: "Suite",
-            rate_plan: "flex",
-          },
-        ],
-        debug: {
-          top_candidates: [{ offer_id: "offer-200", score: 0.9 }],
-        },
-      },
-    });
-
-    expect(parsed.propertyId).toBe("hotel-wrapped");
-    expect(parsed.offers[0]?.offerId).toBe("offer-200");
-    expect(parsed.debug.topCandidates[0]?.offer_id).toBe("offer-200");
-  });
-
-  it("extracts property context from nested snake_case debug shapes", () => {
-    const parsed = parseOffersResponse({
-      data: {
-        property_id: "hotel-nested",
-        offers: [{ offer_id: "offer-1", recommended: true }],
-        debug: {
-          profile_final: {
-            strategy_mode: "protective",
-            time_zone: "Asia/Tokyo",
-            stay_policies: [
-              { summary: "No same-day cancellation" },
-              "ID check at desk",
-            ],
-            fallback_capabilities: {
-              text_link: true,
-              transfer: false,
-              waitlist: {
-                enabled: true,
-                modes: ["sms", "email"],
-              },
-            },
-          },
-        },
-      },
-    });
-
-    expect(parsed.propertyContext.strategyMode).toBe("protective");
-    expect(parsed.propertyContext.timezone).toBe("Asia/Tokyo");
-    expect(parsed.propertyContext.policies).toContain("No same-day cancellation");
-    expect(parsed.propertyContext.policies).toContain("ID check at desk");
-    expect(parsed.propertyContext.capabilities).toContain("text_link: on");
-    expect(parsed.propertyContext.capabilities).toContain("transfer: off");
-    expect(parsed.propertyContext.capabilities).toContain("waitlist.enabled: on");
-    expect(parsed.propertyContext.capabilities).toContain("waitlist.modes: sms, email");
-  });
-
-  it("reads strategy mode from debug.resolvedRequest", () => {
-    const parsed = parseOffersResponse({
-      data: {
-        propertyId: "inn_at_mount_shasta",
-        offers: [{ offerId: "rp_flex", recommended: true }],
-        debug: {
-          resolvedRequest: {
-            strategyMode: "balanced",
-          },
-        },
-      },
-    });
-
-    expect(parsed.propertyContext.strategyMode).toBe("balanced");
-  });
-
-  it("maps roomType/ratePlan objects and debug reason codes from demo payload shape", () => {
-    const parsed = parseOffersResponse({
-      data: {
-        propertyId: "inn_at_mount_shasta",
-        channel: "voice",
+        propertyId: "demo_property",
+        channel: "web",
         currency: "USD",
         priceBasisUsed: "afterTax",
-        offers: [
-          {
-            offerId: "rp_flex",
-            type: "SAFE",
-            recommended: true,
-            roomType: {
-              id: "rt_king",
-              name: "King Room",
-              description: "King description",
-              features: ["WiFi", "Parking"],
-            },
-            ratePlan: {
-              id: "rp_flex",
-              name: "Flexible",
-            },
-            policy: {
-              refundability: "refundable",
-              paymentTiming: "pay_at_property",
-              cancellationSummary: "Free cancellation up to 24 hours before arrival.",
-            },
-            pricing: {
-              basis: "afterTax",
-              total: 383.04,
+        configVersion: 1,
+        recommended_room: {
+          room_type: "Family Suite",
+          rate_plan: "Flexible Rate",
+          nightly_price: 329,
+          total_price: 987,
+          pricing_breakdown: {
+            subtotal: 760,
+            taxes_and_fees: 102,
+            included_fees: {
+              pet_fee_per_night: 25,
+              pet_fee_total: 50,
+              early_check_in_flat_fee: 35,
+              early_check_in_fee_total: 35,
+              parking_fee_total: 0,
             },
           },
+          score: 0.8731,
+          reasons: ["Strong fit", "Good value"],
+          policy_summary: "Refundable rate with flexible cancellation.",
+          inventory_note: "Only 2 left.",
+          room_type_id: "rt_family_suite",
+          rate_plan_id: "rp_flex",
+        },
+        recommended_offers: [
+          {
+            bundle_type: "breakfast",
+            label: "Breakfast package",
+            score: 0.71,
+            reasons: ["Attach probability high"],
+            estimated_price_delta: 18,
+          },
         ],
-        debug: {
-          reasonCodes: ["SELECT_PRIMARY_SAFE"],
-          topCandidates: [
-            {
-              roomTypeId: "rt_king",
-              ratePlanId: "rp_flex",
-              basis: "afterTax",
-              totalPrice: 383.04,
-              scoreTotal: 57.9,
-              components: { valueScore: 81 },
+        ranked_rooms: [
+          {
+            room_type_id: "rt_family_suite",
+            room_type_name: "Family Suite",
+            rate_plan_id: "rp_flex",
+            price: 987,
+            score: 0.8731,
+            component_scores: {
+              fit: 0.95,
+              value: 0.72,
             },
-          ],
+            reasons: ["Strong fit"],
+          },
+        ],
+        fallback: null,
+      },
+    });
+
+    expect(parsed.propertyId).toBe("demo_property");
+    expect(parsed.recommendedRoom?.roomType).toBe("Family Suite");
+    expect(parsed.recommendedRoom?.ratePlan).toBe("Flexible Rate");
+    expect(parsed.recommendedRoom?.pricingBreakdown.subtotal).toBe(760);
+    expect(parsed.recommendedRoom?.pricingBreakdown.taxesAndFees).toBe(102);
+    expect(parsed.recommendedRoom?.pricingBreakdown.includedFees).toEqual([
+      { label: "Pet Fee ($25/night)", amount: 50 },
+      { label: "Early Check In Fee", amount: 35 },
+    ]);
+    expect(parsed.recommendedOffers[0]?.label).toBe("Breakfast package");
+    expect(parsed.rankedRooms[0]?.roomTypeName).toBe("Family Suite");
+    expect(parsed.rankedRooms[0]?.componentScores.fit).toBe(0.95);
+    expect(parsed.fallback).toBeNull();
+  });
+
+  it("maps no-recommendation fallback case", () => {
+    const parsed = parseOffersResponse({
+      data: {
+        recommended_room: null,
+        recommended_offers: [],
+        ranked_rooms: [],
+        fallback: {
+          type: "suggest_alternate_dates",
+          reason: "No eligible room remained. Try nearby dates.",
+          suggestions: [],
         },
       },
     });
 
-    expect(parsed.offers[0]?.room).toBe("King Room");
-    expect(parsed.offers[0]?.ratePlan).toBe("Flexible");
-    expect(parsed.offers[0]?.cancellationSummary).toContain("Free cancellation");
-    expect(parsed.offers[0]?.paymentSummary).toBe("pay_at_property");
-    expect(parsed.offers[0]?.pricingBreakdown.total).toBe(383.04);
-    expect(parsed.reasonCodes).toContain("SELECT_PRIMARY_SAFE");
-    expect(parsed.debug.topCandidates[0]?.scoreTotal).toBe(57.9);
-  });
-
-  it("maps pricing breakdown fields when present", () => {
-    const parsed = parseOffersResponse({
-      data: {
-        offers: [
-          {
-            offerId: "offer-1",
-            recommended: true,
-            pricing: {
-              breakdown: {
-                subtotal: 300,
-                taxesAndFees: 45,
-                addOns: 25,
-                total: 370,
-              },
-            },
-          },
-        ],
-      },
-    });
-
-    expect(parsed.offers[0]?.pricingBreakdown.subtotal).toBe(300);
-    expect(parsed.offers[0]?.pricingBreakdown.taxesFees).toBe(45);
-    expect(parsed.offers[0]?.pricingBreakdown.addOns).toBe(25);
-    expect(parsed.offers[0]?.pricingBreakdown.total).toBe(370);
-  });
-
-  it("maps demo pricing breakdown with baseRateSubtotal and includedFees", () => {
-    const parsed = parseOffersResponse({
-      data: {
-        configVersion: 1,
-        offers: [
-          {
-            offerId: "rp_flex",
-            recommended: true,
-            pricing: {
-              totalAfterTax: 249.76,
-              breakdown: {
-                baseRateSubtotal: 223,
-                taxesAndFees: 26.76,
-                includedFees: {
-                  totalIncludedFees: 0,
-                },
-              },
-            },
-          },
-        ],
-      },
-    });
-
-    expect(parsed.configVersion).toBe("1");
-    expect(parsed.offers[0]?.pricingBreakdown.subtotal).toBe(223);
-    expect(parsed.offers[0]?.pricingBreakdown.taxesFees).toBe(26.76);
-    expect(parsed.offers[0]?.pricingBreakdown.addOns).toBe(0);
-    expect(parsed.offers[0]?.pricingBreakdown.total).toBe(249.76);
-  });
-
-  it("returns a secondary offer even when offerId values are duplicated", () => {
-    const parsed = parseOffersResponse({
-      data: {
-        offers: [
-          { offerId: "rp_flex", recommended: true, roomType: { name: "King" } },
-          { offerId: "rp_flex", recommended: false, roomType: { name: "Queen" } },
-        ],
-      },
-    });
-
-    const secondary = getSecondaryOffer(parsed.offers);
-    expect(secondary?.room).toBe("Queen");
+    expect(parsed.recommendedRoom).toBeNull();
+    expect(parsed.recommendedOffers).toEqual([]);
+    expect(parsed.rankedRooms).toEqual([]);
+    expect(parsed.fallback?.type).toBe("suggest_alternate_dates");
   });
 });

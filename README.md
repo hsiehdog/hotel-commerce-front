@@ -59,20 +59,36 @@ Use this route to demo `POST /offers/generate` as a business-facing offer decisi
    - `Explainability mode` toggle (defaults to on)
 7. Click **Run Offer Decision**.
 8. Review top-down:
-   - `Offer decision` (primary recommendation, secondary tradeoff, risk/flexibility badges)
-   - `Why this was selected` (decision story + grouped reason codes)
-   - `Property context` (resolved property/currency/strategy/timezone/policies/capabilities)
-   - detailed tabs for `Why Panel`, `Debug Deep Dive`, and `Raw JSON`
+   - `Recommended Room` (room, plan, price breakdown, reasons, policy, inventory note)
+   - `Recommended Upsells` when the engine returns attach candidates
+   - `User Profile` (persona confidence + scoring weights when available)
+   - `Room Ranking` and `Audit Trail` for ranked rooms, effective config, and raw payload review
+
+### `/offers/generate` response shape used by the frontend
+
+The current frontend contract is centered on a single top recommendation plus ranking context:
+
+- `propertyId` / `property_id`
+- `channel`
+- `currency`
+- `priceBasisUsed` / `price_basis_used`
+- `configVersion` / `config_version`
+- `persona_confidence`
+- `recommended_room`
+- `recommended_offers`
+- `ranked_rooms`
+- `fallback`
+- `debug`
 
 ### Screenshot notes
 
 Capture these screens for stakeholder walkthroughs:
 
 1. Basic mode request form with preset chips and quick date chips.
-2. Offer decision summary showing primary and secondary cards with SAFE/SAVER badges.
-3. Why panel and property context panel side-by-side.
-4. Debug Deep Dive candidate table with selected-row highlight.
-5. Raw JSON tab with request/response and copy bundle action.
+2. Recommended room card with pricing breakdown and rationale.
+3. User Profile and Room Ranking sections.
+4. Audit Trail tabs with effective config and ranked room payloads.
+5. Raw JSON tab with request/response and download action.
 
 ## Offer logs dashboard (`/demo/offers/logs`)
 
@@ -90,11 +106,11 @@ Use this route to inspect historical offer decisions in a table-first ops log.
    - `recorded at` (no seconds)
    - `channel`
    - `property`
-   - `basic offer details` (`check-in/check-out`, `rooms`, `adults/children`)
+   - `user details` (`check-in/check-out`, `rooms`, `adults/children`)
    - `created outbox`
-   - `primary offer name` (`room - rate`)
+   - `offer name`
    - `total`
-7. Date range formatting in `basic offer details` is deterministic:
+7. Date range formatting in `user details` is deterministic:
    - same day: `Mon D, YYYY`
    - same month + year: `Mon D-D, YYYY`
    - same year: `Mon D - Mon D, YYYY`
@@ -105,7 +121,7 @@ Use this route to inspect historical offer decisions in a table-first ops log.
    - `GuestProfile`
    - `CandidateAnalysis`
    - `DebugPanel`
-10. Detail rendering uses `GET /offers/logs/:decisionId` and prioritizes `generateResponse.data` as the frontend contract, with normalized/raw fallbacks for troubleshooting fields.
+10. Detail rendering uses `GET /offers/logs/:decisionId`, prioritizes `generateResponse.data`, and falls back to the table row’s primary offer when the detail payload is missing `recommended_room`.
 
 ### Backend response notes
 
@@ -144,17 +160,19 @@ Use this route to demo backend chat sessions with offer parity to `/offers/gener
   - `data.commerce?` (web parity path)
   - `data.decisionId?`
   - `data.debug?`
-- Frontend source of truth for offer rendering is `data.commerce.offers` when present.
-- `data.offers` is only used as a fallback when `data.commerce.offers` is absent.
+- Frontend source of truth is now `data.commerce.recommended_room`.
+- If `recommended_room` is absent, chat falls back to the first item in `data.commerce.ranked_rooms`.
+- `data.offers` remains a legacy field in the API type, but the current chat demo does not rely on it for rendering.
 
 ### Offer parity behavior in chat
 
-- Chat offer cards intentionally reuse the same offer card component as the `/demo/offers` summary.
-- Commerce pricing fields are mapped to the same card breakdown:
-  - Base price (`pricing.breakdown.baseRateSubtotal`)
-  - Taxes & fees (`pricing.breakdown.taxesAndFees`)
-  - Included fee rows from `pricing.breakdown.includedFees` (for example pet/parking totals)
-- Room/rate subtitle prefers room-type/rate-plan labels from commerce data so chat and offers display consistent names.
+- Chat currently renders a compact single-card recommendation summary.
+- The card is derived from the same room recommendation payload used by `/demo/offers`:
+  - `recommended_room.room_type`
+  - `recommended_room.rate_plan`
+  - `recommended_room.total_price`
+  - `recommended_room.policy_summary`
+- If only `ranked_rooms` is present, the first ranked room is converted into that same compact card shape.
 
 ## Available scripts
 

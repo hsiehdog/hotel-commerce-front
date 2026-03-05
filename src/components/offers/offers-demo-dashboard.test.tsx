@@ -28,10 +28,6 @@ describe("OffersDemoDashboard", () => {
 
     render(<OffersDemoDashboard />);
 
-    const propertySelect = screen.getByLabelText("Property") as HTMLSelectElement;
-    const propertyLabels = Array.from(propertySelect.options).map((option) => option.textContent);
-    expect(propertyLabels).toEqual(["Demo Property", "Inn At Mount Shasta"]);
-
     expect(screen.queryByLabelText("Demo scenario")).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "Adv" }));
@@ -39,74 +35,49 @@ describe("OffersDemoDashboard", () => {
     expect(screen.getByLabelText("Demo scenario")).toBeTruthy();
   });
 
-  it("renders single-screen decision audit trail when response includes debug payload", async () => {
+  it("renders single recommended room and upsells", async () => {
     const user = userEvent.setup();
 
     mockedRequestOfferGeneration.mockResolvedValue({
-      property_id: "hotel-9",
-      channel: "web",
-      currency: "USD",
-      price_basis_used: "LOS",
-      config_version: "v1",
-      strategy_mode: "balanced",
-      timezone: "America/New_York",
-      policies: ["ID required"],
-      reason_codes: ["filter_inventory", "selection_margin_priority", "fallback_waitlist"],
-      decisionTrace: ["inventory filter", "margin rank", "recommended offer selected"],
-      offers: [
-        {
-          offer_id: "offer-safe",
-          recommended: true,
-          room_type: "Deluxe King",
-          rate_plan: "flex",
-          pricing: { total: 350, paymentType: "pay_now" },
-          cancellationPolicy: { refundable: true },
+      data: {
+        propertyId: "hotel-9",
+        channel: "web",
+        currency: "USD",
+        priceBasisUsed: "afterTax",
+        configVersion: 1,
+        recommended_room: {
+          room_type: "Family Suite",
+          rate_plan: "Flexible Rate",
+          nightly_price: 329,
+          total_price: 987,
+          score: 0.8731,
+          reasons: ["Strong fit"],
+          policy_summary: "Refundable rate.",
+          inventory_note: "Only 2 left",
+          room_type_id: "rt_family_suite",
+          rate_plan_id: "rp_flex",
         },
-        {
-          offer_id: "offer-saver",
-          recommended: false,
-          room_type: "Standard",
-          rate_plan: "prepay",
-          pricing: { total: 300, paymentType: "pay_at_property" },
-          cancellationPolicy: { refundable: false },
-        },
-      ],
-      debug: {
-        selectionSummary: {
-          selectedOfferId: "offer-safe",
-        },
-        scoring: {
-          weights: {
-            value: 0.3,
-            conversion: 0.35,
-            experience: 0.1,
-            margin: 0.1,
-            risk: 0.15,
-          },
-        },
-        resolvedRequest: { property_id: "hotel-9" },
-        profilePreAri: { profile: "pre" },
-        profileFinal: {
-          tripType: "family",
-          decisionPosture: "safe",
-          capabilities: {
-            text_link: true,
-            waitlist: true,
-          },
-        },
-        topCandidates: [
+        recommended_offers: [
           {
-            offerId: "offer-safe",
-            roomTypeName: "Deluxe King",
-            roomTypeDescription: "High floor",
-            features: ["balcony"],
-            priceBasis: "LOS",
-            total: 350,
-            riskContributors: ["none"],
-            score: 0.91,
-            scoreComponents: { conversion: 0.5, margin: 0.4 },
+            bundle_type: "breakfast",
+            label: "Breakfast package",
+            score: 0.71,
+            reasons: ["Attach probability high"],
+            estimated_price_delta: 18,
           },
         ],
+        ranked_rooms: [
+          {
+            room_type_id: "rt_family_suite",
+            room_type_name: "Family Suite",
+            rate_plan_id: "rp_flex",
+            price: 987,
+            score: 0.8731,
+            component_scores: { fit: 0.95 },
+            reasons: ["Strong fit"],
+          },
+        ],
+        fallback: null,
       },
     });
 
@@ -114,65 +85,44 @@ describe("OffersDemoDashboard", () => {
 
     await user.type(screen.getByLabelText("Check-in"), "2026-03-10");
     await user.type(screen.getByLabelText("Check-out"), "2026-03-12");
-
     await user.click(screen.getByRole("button", { name: "Run Decision" }));
 
     await waitFor(() => {
-      expect(screen.getByText("Primary Offer")).toBeTruthy();
+      expect(screen.getAllByText("Recommended Room").length).toBeGreaterThan(0);
     });
 
-    expect(screen.getByText("User Profile")).toBeTruthy();
-    expect(screen.getByText("family")).toBeTruthy();
-    expect(screen.getByText("safe")).toBeTruthy();
-    expect(screen.getByText("Weights")).toBeTruthy();
-    expect(screen.getByText(/Value:/)).toBeTruthy();
-    expect(screen.getByText(/0.30/)).toBeTruthy();
-    expect(screen.getByText(/Conversion:/)).toBeTruthy();
-    expect(screen.getByText(/0.35/)).toBeTruthy();
-    expect(screen.getByText("Offer Ranking")).toBeTruthy();
-    expect(screen.getByText("Audit Trail")).toBeTruthy();
+    expect(screen.getByText("Family Suite | Flexible Rate")).toBeTruthy();
+    expect(screen.getByText("Recommended Upsells")).toBeTruthy();
+    expect(screen.getByText("Attach probability high")).toBeTruthy();
+    expect(screen.getByText("Room Ranking")).toBeTruthy();
   });
 
-  it("submits new canonical constraint attributes in request payload", async () => {
+  it("renders fallback UI when recommendation is null", async () => {
     const user = userEvent.setup();
 
     mockedRequestOfferGeneration.mockResolvedValue({
       data: {
-        propertyId: "hotel-9",
-        offers: [{ offerId: "offer-safe", recommended: true }],
+        recommended_room: null,
+        recommended_offers: [],
+        ranked_rooms: [],
+        fallback: {
+          type: "suggest_alternate_dates",
+          reason: "No eligible room remained. Try nearby dates.",
+          suggestions: [],
+        },
       },
     });
 
     render(<OffersDemoDashboard />);
 
-    await user.type(screen.getByLabelText("Check-in"), "2026-06-10");
-    await user.type(screen.getByLabelText("Check-out"), "2026-06-13");
-
-    await user.click(screen.getByLabelText("Pet friendly"));
-    await user.click(screen.getByLabelText("Accessible"));
-    await user.click(screen.getByLabelText("Two beds"));
-    await user.click(screen.getByLabelText("Parking"));
-    await user.click(screen.getByLabelText("Breakfast package"));
-    await user.click(screen.getByLabelText("Early check-in"));
-    await user.click(screen.getByLabelText("Late check-out"));
-
+    await user.type(screen.getByLabelText("Check-in"), "2026-03-10");
+    await user.type(screen.getByLabelText("Check-out"), "2026-03-12");
     await user.click(screen.getByRole("button", { name: "Run Decision" }));
 
     await waitFor(() => {
-      expect(mockedRequestOfferGeneration).toHaveBeenCalledTimes(1);
+      expect(screen.getByText("No Recommendation")).toBeTruthy();
     });
 
-    expect(mockedRequestOfferGeneration).toHaveBeenCalledWith(
-      expect.objectContaining({
-        pet_friendly: true,
-        accessible_room: true,
-        needs_two_beds: true,
-        parking_needed: true,
-        breakfast_package: true,
-        early_check_in: true,
-        late_check_out: true,
-      }),
-    );
-    expect(mockedRequestOfferGeneration.mock.calls[0]?.[0]).not.toHaveProperty("preferences");
+    expect(screen.getByText("No eligible room remained. Try nearby dates.")).toBeTruthy();
   });
 });

@@ -360,6 +360,7 @@ export function RequestForm({
                     <option value="web">web</option>
                     <option value="voice">voice</option>
                     <option value="agent">agent</option>
+                    <option value="chat">chat</option>
                   </select>
                 </div>
               </div>

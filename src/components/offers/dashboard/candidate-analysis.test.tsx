@@ -11,9 +11,40 @@ function buildParsedResponse(): ParsedOffersResponse {
     currency: "USD",
     priceBasisUsed: "afterTax",
     configVersion: "1",
-    offers: [],
-    decisionTrace: null,
-    reasonCodes: [],
+    personaConfidence: {},
+    recommendedRoom: {
+      roomType: "Accessible King Room",
+      ratePlan: "Flexible",
+      nightlyPrice: 140,
+      totalPrice: 283.36,
+      pricingBreakdown: {
+        subtotal: 250,
+        taxesAndFees: 33.36,
+        includedFees: [],
+      },
+      score: 0.91,
+      reasons: ["Best fit"],
+      policySummary: "Refundable",
+      inventoryNote: "Only 2 left",
+      roomTypeId: "rt_king",
+      ratePlanId: "rp_flex",
+    },
+    recommendedOffers: [],
+    rankedRooms: [
+      {
+        roomTypeId: "rt_king",
+        roomTypeName: "Accessible King Room",
+        ratePlanId: "rp_flex",
+        price: 283.36,
+        score: 0.91,
+        componentScores: {
+          fit: 0.95,
+          value: 0.72,
+        },
+        reasons: ["Strong fit"],
+      },
+    ],
+    fallback: null,
     propertyContext: {
       propertyId: "demo_property",
       currency: "USD",
@@ -28,88 +59,107 @@ function buildParsedResponse(): ParsedOffersResponse {
       profileFinal: null,
       scoring: null,
       selectionSummary: null,
-      topCandidates: [],
     },
     raw: {},
   };
 }
 
 describe("CandidateAnalysis", () => {
-  it("hides component columns and does not render candidate ids in ranking rows", () => {
+  it("renders ranked rooms and marks the recommended selection", () => {
     render(
       <CandidateAnalysis
-        displayedCandidates={[
-          {
-            offerId: "candidate-alpha",
-            roomTypeName: "Accessible King Room",
-            ratePlanName: "Flexible",
-            archetype: "SAFE",
-            totalPrice: 283.36,
-            components: {
-              valueScore: 37.95,
-              conversionScore: 85,
-              experienceScore: 20,
-              marginProxyScore: 62.05,
-              riskScore: 15,
-            },
-          },
-        ]}
-        scoringWeights={{ value: 0.7816, conversion: 0.1954, experience: 0.023, margin: 0, risk: 0.13 }}
         expandedCandidate={null}
         setExpandedCandidate={vi.fn()}
         parsedResponse={buildParsedResponse()}
       />,
     );
 
-    expect(screen.queryByRole("columnheader", { name: "Value" })).toBeNull();
-    expect(screen.queryByRole("columnheader", { name: "Conv" })).toBeNull();
-    expect(screen.queryByRole("columnheader", { name: "Exp" })).toBeNull();
-    expect(screen.queryByRole("columnheader", { name: "Margin" })).toBeNull();
-    expect(screen.queryByRole("columnheader", { name: "Risk" })).toBeNull();
-
-    expect(screen.queryByText("candidate-alpha")).toBeNull();
-    expect(screen.queryByText("alpha")).toBeNull();
+    expect(screen.getByText("Room Ranking")).toBeTruthy();
+    expect(screen.getByText("Accessible King Room")).toBeTruthy();
+    expect(screen.getByText("Sel")).toBeTruthy();
+    expect(screen.getByText("Strong fit")).toBeTruthy();
   });
 
-  it("uses passed scoring weights in formula and shows missing-weight message without defaults", () => {
-    const candidate = {
-      offerId: "candidate-beta",
-      roomTypeName: "Accessible King Room",
-      ratePlanName: "Flexible",
-      archetype: "SAFE",
-      totalPrice: 283.36,
-      components: {
-        valueScore: 100,
-        conversionScore: 25,
-        experienceScore: 20,
-        marginProxyScore: 0,
-        riskScore: 60,
+  it("shows empty state when ranked rooms are empty", () => {
+    const parsed = buildParsedResponse();
+    parsed.rankedRooms = [];
+
+    render(
+      <CandidateAnalysis
+        expandedCandidate={null}
+        setExpandedCandidate={vi.fn()}
+        parsedResponse={parsed}
+      />,
+    );
+
+    expect(screen.getByText("No ranked rooms returned for this request.")).toBeTruthy();
+  });
+
+  it("humanizes ids and falls back to recommended room reasons for the selected row", () => {
+    const parsed = buildParsedResponse();
+    parsed.rankedRooms = [
+      {
+        roomTypeId: "rt_premier_suite",
+        roomTypeName: "RT_PREMIER_SUITE",
+        ratePlanId: "rp_paynow",
+        price: 406.56,
+        score: 0.91,
+        componentScores: {
+          fit: 0.95,
+        },
+        reasons: [],
       },
+    ];
+    parsed.recommendedRoom = {
+      ...parsed.recommendedRoom!,
+      roomTypeId: "rt_premier_suite",
+      ratePlanId: "rp_paynow",
+      reasons: ["Limited remaining inventory at this rate"],
     };
 
-    const { rerender } = render(
+    render(
       <CandidateAnalysis
-        displayedCandidates={[candidate]}
-        scoringWeights={{ value: 0.7816, conversion: 0.1954, experience: 0.023, margin: 0, risk: 0.13 }}
-        expandedCandidate="candidate-beta-0"
+        expandedCandidate={null}
         setExpandedCandidate={vi.fn()}
-        parsedResponse={buildParsedResponse()}
+        parsedResponse={parsed}
       />,
     );
 
-    expect(screen.getByText(/100\.00\*0\.78/)).toBeTruthy();
-    expect(screen.queryByText("Weights missing in debug.scoring.weights")).toBeNull();
+    expect(screen.getByText("Premier Suite")).toBeTruthy();
+    expect(screen.getByText("Pay Now")).toBeTruthy();
+    expect(screen.getByText("Limited remaining inventory at this rate")).toBeTruthy();
+  });
 
-    rerender(
+  it("formats raw coded room names like RT_KING into human-readable labels", () => {
+    const parsed = buildParsedResponse();
+    parsed.rankedRooms = [
+      {
+        roomTypeId: "RT_KING",
+        roomTypeName: "RT_KING",
+        ratePlanId: "RP_PAYNOW",
+        price: 213.14,
+        score: 0.71,
+        componentScores: {},
+        reasons: [],
+      },
+    ];
+    parsed.recommendedRoom = {
+      ...parsed.recommendedRoom!,
+      roomTypeId: "RT_KING",
+      ratePlanId: "RP_PAYNOW",
+      reasons: ["Good relative value for this search"],
+    };
+
+    render(
       <CandidateAnalysis
-        displayedCandidates={[candidate]}
-        scoringWeights={{}}
-        expandedCandidate="candidate-beta-0"
+        expandedCandidate={null}
         setExpandedCandidate={vi.fn()}
-        parsedResponse={buildParsedResponse()}
+        parsedResponse={parsed}
       />,
     );
 
-    expect(screen.getByText("Weights missing in debug.scoring.weights")).toBeTruthy();
+    expect(screen.getByText("King Room")).toBeTruthy();
+    expect(screen.getByText("Pay Now")).toBeTruthy();
+    expect(screen.getByText("Good relative value for this search")).toBeTruthy();
   });
 });
