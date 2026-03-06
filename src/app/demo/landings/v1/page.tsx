@@ -1,73 +1,143 @@
 import Link from "next/link";
 import {
   ArrowRight,
-  Bot,
+  Building2,
+  CheckCircle2,
   MessageSquare,
   PhoneCall,
   Sparkles,
   TrendingUp,
-  Globe,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
-const capabilityCards = [
+const heroHighlights = [
+  "Shift more bookings from Expedia and Booking.com to direct",
+  "Reduce missed price-and-availability calls with 24/7 AI voice",
+  "Increase booking value with guided room upgrades and add-ons",
+  "Give guests faster answers across web, phone, chat, and SMS",
+];
+
+const setupSteps = [
   {
-    title: "Web",
+    step: "01",
+    title: "Connect PMS and booking data",
     description:
-      "Replace static booking grids with a guided shopping flow that helps guests choose the best-fit room faster.",
-    icon: Globe,
+      "Plug into Opera, Cloudbeds, and similar PMS workflows without asking your team to rip and replace core systems.",
   },
   {
-    title: "Voice",
+    step: "02",
+    title: "Configure offers and reservation flows",
     description:
-      "Use AI reservation agents to answer calls, handle common booking questions, and capture demand around the clock.",
-    icon: PhoneCall,
+      "Set room recommendations, upsells, call handling, and messaging prompts around your property's booking strategy.",
   },
   {
-    title: "Chat & SMS",
+    step: "03",
+    title: "Launch channel by channel",
     description:
-      "Let guests ask questions, compare options, and move toward booking in a conversational flow.",
-    icon: MessageSquare,
+      "Start with web, voice, or messaging first, then expand once the direct-booking motion is working for your team.",
   },
-  {
-    title: "AI-assisted discovery",
-    description:
-      "Prepare hotel merchandising and booking logic for the next generation of conversational travel interfaces.",
-    icon: Bot,
-  },
+];
+
+const setupProofPoints = [
+  "Live in days, not months",
+  "Minimal lift for your front-desk team",
+  "Start with one channel and expand over time",
 ];
 
 const directRevenueProblems = [
-  "Too many room and rate combinations for guests to evaluate",
-  "Weak upsell and merchandising flows on direct channels",
-  "Reservation calls missed after hours or during busy desk periods",
-  "Disconnected guest conversations across channels",
-  "Continued reliance on OTAs to provide a better shopping experience",
+  "Guests abandon when room choices are hard to compare",
+  "Front desk teams miss booking calls during busy shifts and after hours",
+  "Direct channels fail to upsell like OTAs do",
+  "Reservation conversations break across phone, site, and messaging",
+  "Hotels pay too much blended CPA because direct conversion stays weak",
+];
+
+const roleCards = [
+  {
+    title: "Revenue Manager",
+    description:
+      "Turn the booking flow into a stronger merchandising channel instead of a flat rate grid.",
+    icon: TrendingUp,
+    outcomes: [
+      "Dynamic upsells for late checkout, parking, spa credit, and breakfast",
+      "Better merchandising during the booking flow",
+      "Higher ADR and ancillary capture from existing direct demand",
+    ],
+  },
+  {
+    title: "Front Office Manager",
+    description:
+      "Reduce repetitive reservation work so staff can focus on in-house guests and higher-value conversations.",
+    icon: PhoneCall,
+    outcomes: [
+      "Fewer repetitive price-and-availability calls",
+      "AI voice answers instantly and supports multiple languages",
+      "Less time spent triaging basic reservation questions",
+    ],
+  },
+  {
+    title: "Owner / Operator",
+    description:
+      "Improve the economics of direct booking without adding more headcount to the desk.",
+    icon: Building2,
+    outcomes: [
+      "Shift more share from OTAs to direct",
+      "Lower blended cost per acquisition",
+      "Capture more revenue from demand you already have",
+    ],
+  },
+];
+
+const bookingFlowBenefits = [
+  "Recommend the best-fit room instead of showing a confusing matrix of rates",
+  "Present upgrade options in plain language guests can act on quickly",
+  "Offer add-ons like late checkout, breakfast, and spa credit at the right moment",
+  "Reduce friction between discovery, decision, and completed booking",
 ];
 
 const bookingSteps = [
-  "Discover",
-  "Recommended room",
-  "Upgrade",
-  "Add-ons",
-  "Book",
+  "Discover stay dates and traveler intent",
+  "Recommend the best-fit room",
+  "Offer a clear upgrade path",
+  "Add high-intent ancillaries",
+  "Complete the booking",
 ];
 
 const voiceCapabilities = [
-  "Answer calls instantly",
+  "Answer price and availability questions instantly",
   "Handle common booking and property questions",
-  "Support multiple languages",
+  "Support multilingual callers without adding staff coverage",
   "Guide callers toward a completed reservation",
 ];
 
-const messagingCapabilities = [
-  "Room recommendations",
-  "Property answers",
-  "Upgrade options",
-  "Booking guidance",
+const transcriptMessages = [
+  {
+    speaker: "Guest",
+    meta: "Web chat",
+    body: "Do you have rooms available this weekend for two adults?",
+    side: "left" as const,
+  },
+  {
+    speaker: "CommerceCo AI",
+    meta: "Instant reply",
+    body: "Yes. I can recommend a Deluxe King at $259 or a Junior Suite at $329. Are you looking for the best value or more space?",
+    side: "right" as const,
+  },
+  {
+    speaker: "Guest",
+    meta: "Follow-up",
+    body: "Best value. Do you offer late checkout or breakfast?",
+    side: "left" as const,
+  },
+  {
+    speaker: "CommerceCo AI",
+    meta: "Upsell",
+    body: "The Deluxe King is the best fit. I can add breakfast for two and late checkout now so the guest can book in one step.",
+    side: "right" as const,
+  },
 ];
 
 function SectionEyebrow({ children }: { children: React.ReactNode }) {
@@ -158,25 +228,23 @@ export default function LandingV1Page() {
         <section className="mx-auto grid w-full max-w-7xl gap-14 px-4 pb-18 pt-14 sm:px-6 lg:grid-cols-[1.1fr_0.9fr] lg:px-8 lg:pb-24 lg:pt-20">
           <div className="space-y-8">
             <div className="space-y-5">
-              <SectionEyebrow>Hotel commerce platform</SectionEyebrow>
-              <h1 className="max-w-3xl text-5xl font-semibold tracking-tight text-slate-950 sm:text-6xl">
-                Turn more hotel shoppers into direct bookings
+              <SectionEyebrow>Direct booking growth</SectionEyebrow>
+              <h1 className="max-w-4xl text-5xl font-semibold tracking-tight text-slate-950 sm:text-6xl">
+                Stop losing high-intent bookings to OTAs.
               </h1>
+              <p className="max-w-3xl text-xl leading-8 text-slate-700 sm:text-2xl">
+                Automate direct bookings and reservation inquiries with one
+                AI-powered commerce platform.
+              </p>
               <p className="max-w-2xl text-lg leading-8 text-slate-600">
-                CommerceCo helps hotels replace outdated booking flows, missed
-                reservation calls, and fragmented guest messaging with one modern
-                commerce platform across web, voice, chat, SMS, and AI-assisted
-                discovery.
+                CommerceCo helps hotels capture more direct demand by replacing weak
+                booking flows, missed front-desk calls, and fragmented guest
+                messaging with a single system across web, voice, chat, and SMS.
               </p>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
-              {[
-                "Guide guests to the right room faster",
-                "Upsell upgrades and add-ons natively",
-                "Answer reservation inquiries 24/7 with AI",
-                "Create a better direct booking experience on every channel",
-              ].map((item) => (
+              {heroHighlights.map((item) => (
                 <Card
                   key={item}
                   className="border-white/70 bg-white/75 py-0 shadow-[0_16px_40px_-26px_rgba(15,23,42,0.45)]"
@@ -194,7 +262,8 @@ export default function LandingV1Page() {
             <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
               <DemoButton />
               <p className="text-sm text-slate-500">
-                See how CommerceCo can grow direct revenue in a 15-minute walkthrough.
+                See how CommerceCo can grow direct bookings and lower OTA dependence
+                in a 15-minute walkthrough.
               </p>
             </div>
           </div>
@@ -225,7 +294,7 @@ export default function LandingV1Page() {
                     <div>
                       <p className="text-2xl font-semibold text-slate-950">Deluxe King</p>
                       <p className="mt-1 text-sm text-slate-500">
-                        Flexible rate with late arrival support
+                        Flexible rate with breakfast and late checkout available
                       </p>
                     </div>
                     <p className="text-3xl font-semibold text-slate-950">$259</p>
@@ -234,8 +303,8 @@ export default function LandingV1Page() {
 
                 <div className="grid gap-3">
                   {[
-                    ["Ocean View", "+$25"],
-                    ["Junior Suite", "+$70"],
+                    ["Ocean View Upgrade", "+$25"],
+                    ["Late checkout", "+$35"],
                     ["Breakfast for two", "+$18"],
                   ].map(([label, value]) => (
                     <div
@@ -249,9 +318,9 @@ export default function LandingV1Page() {
                 </div>
 
                 <div className="rounded-3xl bg-slate-100 p-5">
-                  <p className="text-sm font-medium text-slate-700">Add-ons</p>
+                  <p className="text-sm font-medium text-slate-700">Commerce goals</p>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    {["Parking", "Late checkout", "Spa credit", "Airport transfer"].map(
+                    {["Direct booking", "Lower OTA mix", "Higher ADR", "Ancillary revenue"].map(
                       (item) => (
                         <Badge
                           key={item}
@@ -276,20 +345,67 @@ export default function LandingV1Page() {
           </div>
         </section>
 
+        <section className="mx-auto w-full max-w-7xl px-4 pb-8 sm:px-6 lg:px-8">
+          <div className="rounded-[2rem] border border-white/70 bg-white/80 p-6 shadow-[0_22px_50px_-36px_rgba(15,23,42,0.35)] sm:p-8">
+            <div className="grid gap-8 lg:grid-cols-[0.72fr_1.28fr] lg:items-start">
+              <div className="space-y-4">
+                <SectionEyebrow>Fast setup</SectionEyebrow>
+                <h2 className="text-3xl font-semibold tracking-tight text-slate-950">
+                  Integrate with your PMS and launch in days, not months
+                </h2>
+                <p className="text-base leading-7 text-slate-600">
+                  CommerceCo is designed to work alongside Opera, Cloudbeds, and
+                  similar PMS workflows so you can improve direct bookings without
+                  forcing a disruptive rip-and-replace project.
+                </p>
+                <div className="grid gap-3">
+                  {setupProofPoints.map((item) => (
+                    <div key={item} className="flex items-start gap-3">
+                      <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-700" />
+                      <p className="text-sm leading-6 text-slate-700">{item}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-3">
+                {setupSteps.map((item) => (
+                  <Card
+                    key={item.step}
+                    className="border-slate-200/80 bg-white/90 py-0 shadow-[0_16px_38px_-32px_rgba(15,23,42,0.35)]"
+                  >
+                    <CardContent className="space-y-4 px-5 py-5">
+                      <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-800">
+                        {item.step}
+                      </p>
+                      <div className="space-y-2">
+                        <h3 className="text-lg font-semibold text-slate-950">{item.title}</h3>
+                        <p className="text-sm leading-6 text-slate-600">
+                          {item.description}
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section className="mx-auto w-full max-w-7xl px-4 py-18 sm:px-6 lg:px-8">
           <div className="grid gap-10 lg:grid-cols-[0.95fr_1.05fr] lg:items-start">
             <SectionHeading
               eyebrow="Why direct revenue leaks"
-              title="Hotels are still using booking technology built for a different era"
-              description="Travelers no longer book through a single channel. They discover, compare, and ask questions across hotel websites, phone calls, messaging, and increasingly conversational interfaces."
+              title="Your direct channel is losing revenue before the guest ever books"
+              description="Static booking engines, unanswered reservation intent, and OTA convenience are still outperforming the direct experience at too many hotels."
             />
 
             <Card className="border-slate-200/80 bg-white/80 py-0 shadow-[0_20px_60px_-36px_rgba(15,23,42,0.35)]">
               <CardContent className="space-y-6 px-6 py-6">
                 <p className="text-base leading-7 text-slate-600">
-                  Most hotel booking systems were built around static rate grids,
-                  not guided selling. That creates friction for guests and leaves
-                  revenue on the table.
+                  Most hotel booking systems still make the guest do too much work.
+                  That friction pushes shoppers toward OTAs and leaves your team
+                  handling reservation demand manually.
                 </p>
                 <div className="grid gap-3">
                   {directRevenueProblems.map((problem) => (
@@ -303,8 +419,8 @@ export default function LandingV1Page() {
                   ))}
                 </div>
                 <p className="text-sm font-medium text-slate-900">
-                  Hotels should be able to merchandise and convert direct demand as
-                  effectively as the major travel platforms.
+                  Direct booking should feel as easy to buy from as the major travel
+                  platforms, and more profitable for the property.
                 </p>
               </CardContent>
             </Card>
@@ -314,13 +430,13 @@ export default function LandingV1Page() {
         <section id="platform" className="border-y border-slate-200/70 bg-white/60">
           <div className="mx-auto w-full max-w-7xl px-4 py-18 sm:px-6 lg:px-8">
             <SectionHeading
-              eyebrow="One engine, many touchpoints"
-              title="One commerce engine for every guest touchpoint"
-              description="CommerceCo gives hotels a single platform to present offers, answer booking questions, and convert reservations across direct channels."
+              eyebrow="Built for hotel teams"
+              title="A direct-booking platform that maps to the jobs your team actually owns"
+              description="CommerceCo is positioned around the operators responsible for conversion, reservation coverage, and channel profitability."
             />
 
-            <div className="mt-10 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-              {capabilityCards.map((card) => {
+            <div className="mt-10 grid gap-5 lg:grid-cols-3">
+              {roleCards.map((card) => {
                 const Icon = card.icon;
 
                 return (
@@ -333,10 +449,20 @@ export default function LandingV1Page() {
                         <Icon className="size-5" />
                       </div>
                       <div className="space-y-3">
-                        <h3 className="text-xl font-semibold text-slate-950">{card.title}</h3>
+                        <h3 className="text-2xl font-semibold text-slate-950">{card.title}</h3>
                         <p className="text-sm leading-6 text-slate-600">
                           {card.description}
                         </p>
+                      </div>
+                      <div className="grid gap-3">
+                        {card.outcomes.map((item) => (
+                          <div
+                            key={item}
+                            className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700"
+                          >
+                            {item}
+                          </div>
+                        ))}
                       </div>
                     </CardContent>
                   </Card>
@@ -351,17 +477,12 @@ export default function LandingV1Page() {
             <div className="space-y-8">
               <SectionHeading
                 eyebrow="Booking flow"
-                title="A booking flow built to convert and upsell"
-                description="Instead of forcing guests to decode a matrix of rooms and rates, CommerceCo guides them through a simpler path to purchase."
+                title="Guide guests to the right room, then surface the right upsell"
+                description="CommerceCo replaces a confusing booking matrix with a guided path that helps guests decide faster and spend more confidently."
               />
 
               <div className="grid gap-4 sm:grid-cols-2">
-                {[
-                  "Show a recommended room first",
-                  "Present clear upgrade choices",
-                  "Offer relevant add-ons at the right moment",
-                  "Move the guest toward booking with less friction",
-                ].map((item) => (
+                {bookingFlowBenefits.map((item) => (
                   <div
                     key={item}
                     className="rounded-3xl border border-slate-200 bg-white/85 px-5 py-5 shadow-[0_16px_30px_-28px_rgba(15,23,42,0.55)]"
@@ -379,9 +500,9 @@ export default function LandingV1Page() {
                   </p>
                 </div>
                 <p className="mt-4 max-w-xl text-lg leading-8 text-slate-200">
-                  CommerceCo is designed to help hotels improve direct booking
-                  conversion, increase average booking value, and generate more
-                  revenue from existing demand.
+                  The result is stronger direct conversion, higher average booking
+                  value, and less dependence on OTA channels to do the heavy lifting
+                  for your property.
                 </p>
                 <div className="mt-6">
                   <DemoButton className="h-11 rounded-full bg-white px-6 text-slate-950 hover:bg-slate-100" />
@@ -424,8 +545,8 @@ export default function LandingV1Page() {
             <div className="grid gap-10 lg:grid-cols-[0.95fr_1.05fr]">
               <SectionHeading
                 eyebrow="AI reservations"
-                title="Capture demand even when your team is busy or offline"
-                description="CommerceCo helps hotels respond to booking intent wherever it appears, whether a guest is calling the property, sending a message, or starting with a conversational interface."
+                title="Capture reservation demand when your team is busy, offline, or handling in-house guests"
+                description="CommerceCo keeps booking intent moving across phone, chat, and messaging so high-intent guests get answers before they drift back to an OTA."
               />
 
               <div className="grid gap-5 md:grid-cols-2">
@@ -437,8 +558,9 @@ export default function LandingV1Page() {
                     <div className="space-y-2">
                       <h3 className="text-2xl font-semibold text-slate-950">Voice</h3>
                       <p className="text-sm leading-6 text-slate-600">
-                        AI reservation agents answer calls, handle common questions,
-                        and keep booking demand moving after hours.
+                        AI reservation agents answer the questions that would
+                        otherwise pile up at the front desk and guide callers toward
+                        booking.
                       </p>
                     </div>
                     <div className="grid gap-3">
@@ -464,22 +586,43 @@ export default function LandingV1Page() {
                         Chat and messaging
                       </h3>
                       <p className="text-sm leading-6 text-slate-600">
-                        Guests can start with a simple question and move toward booking
-                        with room recommendations, answers, and upgrades.
+                        Show guests what a direct booking conversation can feel like:
+                        immediate answers, room guidance, and upsells in one thread.
                       </p>
                     </div>
-                    <div className="rounded-3xl bg-slate-950 p-4 text-sm text-slate-100">
-                      “Do you have rooms available this weekend?”
-                    </div>
-                    <div className="grid gap-3">
-                      {messagingCapabilities.map((item) => (
+                    <div className="space-y-3 rounded-[1.75rem] border border-slate-200 bg-slate-50 p-4">
+                      {transcriptMessages.map((message) => (
                         <div
-                          key={item}
-                          className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700"
+                          key={`${message.speaker}-${message.body}`}
+                          className={`flex ${
+                            message.side === "right" ? "justify-end" : "justify-start"
+                          }`}
                         >
-                          {item}
+                          <div
+                            className={`max-w-[88%] rounded-3xl px-4 py-3 ${
+                              message.side === "right"
+                                ? "bg-slate-950 text-white"
+                                : "bg-white text-slate-800"
+                            }`}
+                          >
+                            <p
+                              className={`text-[11px] font-semibold uppercase tracking-[0.18em] ${
+                                message.side === "right"
+                                  ? "text-slate-300"
+                                  : "text-slate-500"
+                              }`}
+                            >
+                              {message.speaker} • {message.meta}
+                            </p>
+                            <p className="mt-2 text-sm leading-6">{message.body}</p>
+                          </div>
                         </div>
                       ))}
+                      <div className="flex justify-end pt-1">
+                        <div className="rounded-full bg-emerald-500 px-4 py-2 text-sm font-medium text-emerald-950">
+                          Continue to booking
+                        </div>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -491,9 +634,10 @@ export default function LandingV1Page() {
                 Future-ready
               </p>
               <p className="mt-3 max-w-4xl text-lg leading-8 text-slate-700">
-                As travel discovery shifts toward conversational experiences,
-                CommerceCo helps hotels stay ready to capture demand beyond the
-                traditional website flow.
+                Be ready for conversational discovery without waiting for your
+                booking engine to catch up. CommerceCo helps you improve direct
+                performance now while preparing for the next generation of guest
+                shopping behavior.
               </p>
             </div>
           </div>
@@ -505,20 +649,21 @@ export default function LandingV1Page() {
               <div className="max-w-3xl space-y-4">
                 <SectionEyebrow>Final CTA</SectionEyebrow>
                 <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-                  Win more direct bookings with a modern hotel commerce platform
+                  See how your hotel can win more direct bookings and lower OTA
+                  dependence
                 </h2>
                 <p className="text-base leading-7 text-slate-300 sm:text-lg">
-                  CommerceCo helps hotels modernize the booking experience,
-                  automate reservation conversations, and grow revenue across
-                  direct channels.
+                  CommerceCo helps hotels improve direct conversion, automate
+                  reservation handling, and increase booking value across every
+                  direct guest touchpoint.
                 </p>
               </div>
 
               <div className="space-y-3">
                 <DemoButton className="h-12 rounded-full bg-white px-6 text-slate-950 hover:bg-slate-100" />
-                <p className="text-sm text-slate-400">
-                  15-minute walkthrough. See how CommerceCo could fit your direct
-                  booking strategy.
+                <p className="max-w-xs text-sm text-slate-400">
+                  15-minute walkthrough of how CommerceCo could fit your PMS,
+                  reservation workflow, and direct booking strategy.
                 </p>
               </div>
             </div>
