@@ -48,7 +48,7 @@ export function AuthForm({ mode }: AuthFormProps) {
   const formTitle =
     mode === "login"
       ? "Welcome back"
-      : "Create an account for the AI Control Center";
+      : "Create an account for Hotel Commerce";
   const formDescription =
     mode === "login"
       ? "Sign in to review usage, manage projects, and chat with your AI copilots."

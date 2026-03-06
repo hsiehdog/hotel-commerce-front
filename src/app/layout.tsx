@@ -16,9 +16,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AI Control Center",
+  title: "Hotel Commerce",
   description:
-    "Starter kit for AI-driven applications with Next.js, Better Auth, shadcn/ui, and a chat-ready dashboard.",
+    "Hotel Commerce demos and operator tools for direct booking experiences, offer orchestration, and conversational reservations.",
 };
 
 export default function RootLayout({
