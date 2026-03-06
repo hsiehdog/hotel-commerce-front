@@ -25,19 +25,19 @@ const heroHighlights = [
 
 const setupSteps = [
   {
-    step: "01",
+    step: "1",
     title: "Connect PMS and booking data",
     description:
       "Plug into Opera, Cloudbeds, and similar PMS workflows without asking your team to rip and replace core systems.",
   },
   {
-    step: "02",
+    step: "2",
     title: "Configure offers and reservation flows",
     description:
       "Set room recommendations, upsells, call handling, and messaging prompts around your property's booking strategy.",
   },
   {
-    step: "03",
+    step: "3",
     title: "Launch channel by channel",
     description:
       "Start with web, voice, or messaging first, then expand once the direct-booking motion is working for your team.",
@@ -345,7 +345,6 @@ export default function LandingV1Page() {
         <section className="mx-auto grid w-full max-w-7xl gap-14 px-4 pb-18 pt-14 sm:px-6 lg:grid-cols-[1.1fr_0.9fr] lg:px-8 lg:pb-24 lg:pt-20">
           <div className="space-y-8">
             <div className="space-y-5">
-              <SectionEyebrow>Direct booking growth</SectionEyebrow>
               <h1 className="max-w-4xl text-5xl font-semibold tracking-tight text-slate-950 sm:text-6xl">
                 Stop losing high-intent bookings to OTAs.
               </h1>
@@ -492,9 +491,9 @@ export default function LandingV1Page() {
                     className="border-slate-200/80 bg-white/90 py-0 shadow-[0_16px_38px_-32px_rgba(15,23,42,0.35)]"
                   >
                     <CardContent className="space-y-4 px-5 py-5">
-                      <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-800">
+                      <div className="flex size-10 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-base font-bold text-emerald-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
                         {item.step}
-                      </p>
+                      </div>
                       <div className="space-y-2">
                         <h3 className="text-lg font-semibold text-slate-950">{item.title}</h3>
                         <p className="text-sm leading-6 text-slate-600">
