@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -139,6 +142,120 @@ const transcriptMessages = [
     side: "right" as const,
   },
 ];
+
+type TranscriptMessage = (typeof transcriptMessages)[number];
+
+function AnimatedTranscript() {
+  const [visibleCount, setVisibleCount] = useState(1);
+  const [typingMessage, setTypingMessage] = useState<TranscriptMessage | null>(null);
+
+  useEffect(() => {
+    const timeouts: number[] = [];
+
+    const scheduleLoop = () => {
+      setVisibleCount(1);
+      setTypingMessage(null);
+
+      let elapsed = 1400;
+
+      transcriptMessages.slice(1).forEach((message, index) => {
+        const isAiMessage = message.side === "right";
+
+        if (isAiMessage) {
+          const typingTimeout = window.setTimeout(() => {
+            setTypingMessage(message);
+          }, elapsed);
+          timeouts.push(typingTimeout);
+          elapsed += 900;
+        }
+
+        const revealTimeout = window.setTimeout(() => {
+          setTypingMessage((current) => (current === message ? null : current));
+          setVisibleCount(index + 2);
+        }, elapsed);
+
+        timeouts.push(revealTimeout);
+        elapsed += 1400;
+      });
+
+      const restartTimeout = window.setTimeout(scheduleLoop, elapsed + 2200);
+      timeouts.push(restartTimeout);
+    };
+
+    scheduleLoop();
+
+    return () => {
+      timeouts.forEach((timeout) => window.clearTimeout(timeout));
+    };
+  }, []);
+
+  const visibleMessages = transcriptMessages.slice(0, visibleCount);
+
+  return (
+    <div className="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-4">
+      <div className="flex min-h-[27.5rem] flex-col justify-start gap-3">
+      {visibleMessages.map((message) => (
+        <div
+          key={`${message.speaker}-${message.body}`}
+          className={`animate-in fade-in-0 slide-in-from-bottom-2 duration-500 flex ${
+            message.side === "right" ? "justify-end" : "justify-start"
+          }`}
+        >
+          <div
+            className={`max-w-[88%] rounded-3xl px-4 py-3 ${
+              message.side === "right"
+                ? "bg-slate-950 text-white"
+                : "bg-white text-slate-800"
+            }`}
+          >
+            <p
+              className={`text-[11px] font-semibold uppercase tracking-[0.18em] ${
+                message.side === "right" ? "text-slate-300" : "text-slate-500"
+              }`}
+            >
+              {message.speaker} • {message.meta}
+            </p>
+            <p className="mt-2 text-sm leading-6">{message.body}</p>
+          </div>
+        </div>
+      ))}
+
+      {typingMessage ? (
+        <div className="animate-in fade-in-0 slide-in-from-bottom-2 duration-300 flex justify-end">
+          <div className="max-w-[72%] rounded-3xl bg-slate-900 px-4 py-3 text-white">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300">
+              CommerceCo AI • Typing
+            </p>
+            <div className="mt-2 flex items-center gap-1.5">
+              <span className="size-2 rounded-full bg-slate-300 animate-pulse" />
+              <span
+                className="size-2 rounded-full bg-slate-300 animate-pulse"
+                style={{ animationDelay: "120ms" }}
+              />
+              <span
+                className="size-2 rounded-full bg-slate-300 animate-pulse"
+                style={{ animationDelay: "240ms" }}
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <div
+        className={`pt-1 transition-all duration-500 ${
+          visibleCount === transcriptMessages.length
+            ? "translate-y-0 opacity-100"
+            : "pointer-events-none translate-y-2 opacity-0"
+        } flex justify-end`}
+      >
+        <div className="rounded-full bg-emerald-500 px-4 py-2 text-sm font-medium text-emerald-950">
+          Continue to booking
+        </div>
+      </div>
+      </div>
+    </div>
+  );
+}
 
 function SectionEyebrow({ children }: { children: React.ReactNode }) {
   return (
@@ -549,7 +666,7 @@ export default function LandingV1Page() {
                 description="CommerceCo keeps booking intent moving across phone, chat, and messaging so high-intent guests get answers before they drift back to an OTA."
               />
 
-              <div className="grid gap-5 md:grid-cols-2">
+              <div className="grid items-start gap-5 md:grid-cols-2">
                 <Card className="border-slate-200/80 bg-white/90 py-0 shadow-[0_18px_45px_-34px_rgba(15,23,42,0.35)]">
                   <CardContent className="space-y-5 px-6 py-6">
                     <div className="flex size-12 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-800">
@@ -590,40 +707,7 @@ export default function LandingV1Page() {
                         immediate answers, room guidance, and upsells in one thread.
                       </p>
                     </div>
-                    <div className="space-y-3 rounded-[1.75rem] border border-slate-200 bg-slate-50 p-4">
-                      {transcriptMessages.map((message) => (
-                        <div
-                          key={`${message.speaker}-${message.body}`}
-                          className={`flex ${
-                            message.side === "right" ? "justify-end" : "justify-start"
-                          }`}
-                        >
-                          <div
-                            className={`max-w-[88%] rounded-3xl px-4 py-3 ${
-                              message.side === "right"
-                                ? "bg-slate-950 text-white"
-                                : "bg-white text-slate-800"
-                            }`}
-                          >
-                            <p
-                              className={`text-[11px] font-semibold uppercase tracking-[0.18em] ${
-                                message.side === "right"
-                                  ? "text-slate-300"
-                                  : "text-slate-500"
-                              }`}
-                            >
-                              {message.speaker} • {message.meta}
-                            </p>
-                            <p className="mt-2 text-sm leading-6">{message.body}</p>
-                          </div>
-                        </div>
-                      ))}
-                      <div className="flex justify-end pt-1">
-                        <div className="rounded-full bg-emerald-500 px-4 py-2 text-sm font-medium text-emerald-950">
-                          Continue to booking
-                        </div>
-                      </div>
-                    </div>
+                    <AnimatedTranscript />
                   </CardContent>
                 </Card>
               </div>
