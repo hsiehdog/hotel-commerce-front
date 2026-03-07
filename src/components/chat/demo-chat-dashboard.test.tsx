@@ -170,7 +170,7 @@ describe("DemoChatDashboard", () => {
     await user.click(screen.getByRole("button", { name: "Send" }));
 
     expect(await screen.findByText("What dates are you looking for?")).toBeTruthy();
-    expect(screen.getByPlaceholderText('Answer for "What dates are you looking for?"')).toBeTruthy();
+    expect(screen.getByPlaceholderText("Type your response...")).toBeTruthy();
     expect(screen.queryByText("Waiting for: Check In, Check Out")).toBeNull();
     expect(screen.queryByText("Need Check In")).toBeNull();
     expect(screen.queryByText("Need Check Out")).toBeNull();
@@ -212,7 +212,7 @@ describe("DemoChatDashboard", () => {
     expect(screen.queryByText("Check Out")).toBeNull();
     expect(screen.queryByRole("button", { name: "Yes" })).toBeNull();
     expect(screen.queryByRole("button", { name: "No" })).toBeNull();
-    expect(screen.getByPlaceholderText('Answer for "Please confirm these stay details."')).toBeTruthy();
+    expect(screen.getByPlaceholderText("Type your response...")).toBeTruthy();
   });
 
   it("renders confirm_offer_recap details in a recap table", async () => {
@@ -307,7 +307,7 @@ describe("DemoChatDashboard", () => {
     await user.click(screen.getByRole("button", { name: "Send" }));
 
     await screen.findByText("Will any children be traveling with you?");
-    await user.type(screen.getByPlaceholderText('Answer for "Will any children be traveling with you?"'), "yes");
+    await user.type(screen.getByPlaceholderText("Type your response..."), "yes");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
     await screen.findByText("Confirmed. I will keep those dates.");
@@ -316,7 +316,7 @@ describe("DemoChatDashboard", () => {
       "session-1",
       expect.objectContaining({ message: "yes" }),
     );
-    expect(screen.getByPlaceholderText('Answer for "Confirmed. I will keep those dates."')).toBeTruthy();
+    expect(screen.getByPlaceholderText("Type your response...")).toBeTruthy();
   });
 
   it("renders retry action from error responseUi", async () => {
@@ -402,7 +402,7 @@ describe("DemoChatDashboard", () => {
     await screen.findByText("Choose a room view.");
     expect(screen.queryByRole("button", { name: "City View" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Ocean View" })).toBeNull();
-    await user.type(screen.getByPlaceholderText('Answer for "Choose a room view."'), "ocean_view");
+    await user.type(screen.getByPlaceholderText("Type your response..."), "ocean_view");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
     await screen.findByText("Ocean view noted.");

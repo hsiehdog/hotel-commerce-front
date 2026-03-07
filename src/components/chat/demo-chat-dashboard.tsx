@@ -232,7 +232,7 @@ function buildComposerPlaceholder(message?: DemoChatMessageItem | null): string 
     return "Type your request...";
   }
 
-  return `Answer for "${prompt}"`;
+  return "Type your response...";
 }
 
 export function DemoChatDashboard() {
