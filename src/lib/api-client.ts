@@ -44,6 +44,56 @@ export type ChatMessage = {
 
 export type ChatMessageStatus = "NEEDS_CLARIFICATION" | "OK" | "ERROR";
 export type ChatNextAction = "ASK_QUESTION" | "CONFIRM" | "PRESENT_OFFERS";
+export type ChatAnswerMode = "yes_no" | "numeric" | "single_choice" | "free_text";
+export type ChatPendingAction = string | Record<string, unknown>;
+
+export type ChatResponseUiOption = {
+  label: string;
+  value: string;
+  description?: string | null;
+};
+
+type ChatResponseUiTurnContext = {
+  answerMode: ChatAnswerMode;
+  targetSlots?: string[];
+  slotHints?: {
+    missingRequired: string[];
+    collected: string[];
+  };
+};
+
+export type ChatResponseUiQuestion = {
+  type: "question";
+} & ChatResponseUiTurnContext;
+
+export type ChatResponseUiConfirmation = {
+  type: "confirmation";
+  summary?: Record<string, unknown> | null;
+} & ChatResponseUiTurnContext;
+
+export type ChatResponseUiSelection = {
+  type: "selection";
+  options: ChatResponseUiOption[];
+} & ChatResponseUiTurnContext;
+
+export type ChatResponseUiOfferRecommendation = {
+  type: "offer_recommendation";
+  showRecommendedRoom?: boolean;
+  showRecommendedOffers?: boolean;
+  showRankedRooms?: boolean;
+};
+
+export type ChatResponseUiError = {
+  type: "error";
+  retryable?: boolean;
+};
+
+export type ChatResponseUi =
+  | ChatResponseUiQuestion
+  | ChatResponseUiConfirmation
+  | ChatResponseUiSelection
+  | ChatResponseUiOfferRecommendation
+  | ChatResponseUiError;
 
 export type ChatSession = {
   sessionId: string;
@@ -60,35 +110,7 @@ export type ChatMessageRequest = {
   metadata?: { locale?: string; device?: string };
 };
 
-export type ChatOffer = {
-  id: string;
-  name: string;
-  description: string;
-  rate_type: "flexible" | "non_refundable";
-  rate_label?: string;
-  cancellation_policy: string;
-  payment_policy: string;
-  enhancements?: string[];
-  disclosures?: string[];
-  fee_breakdown?: Array<{
-    label: string;
-    amount: number;
-  }>;
-  price: {
-    currency: string;
-    per_night: number;
-    subtotal: number;
-    taxes_and_fees: number;
-    total: number;
-    add_ons_total?: number;
-    total_with_add_ons?: number;
-  };
-};
-
-export type ChatCommerceOffer = Record<string, unknown>;
-
 export type ChatCommerce = {
-  offers?: ChatCommerceOffer[];
   [key: string]: unknown;
 };
 
@@ -98,8 +120,9 @@ export type ChatMessageResponse = {
     assistantMessage: string;
     status: ChatMessageStatus;
     nextAction: ChatNextAction;
+    pendingAction?: ChatPendingAction | null;
     slots: Record<string, unknown>;
-    offers?: ChatOffer[];
+    responseUi: ChatResponseUi;
     commerce?: ChatCommerce;
     decisionId?: string;
     debug?: Record<string, unknown>;
@@ -551,85 +574,6 @@ function extractChatRecommendationSource(data: ChatMessageResponse["data"]): Rec
   return null;
 }
 
-function normalizeRecommendedRoomToChatOffer(
-  raw: Record<string, unknown>,
-  currencyFallback: string,
-): ChatOffer {
-  const total = firstNumber(raw.total_price) ?? 0;
-  const nightly = firstNumber(raw.nightly_price) ?? total;
-  const ratePlan = firstString(raw.rate_plan) ?? "Flexible";
-  const policy = firstString(raw.policy_summary) ?? "Offer details available.";
-
-  return {
-    id: firstString(raw.rate_plan_id, raw.room_type_id) ?? "recommended-room",
-    name: firstString(raw.room_type) ?? "Recommended room",
-    description: [ratePlan, firstString(raw.inventory_note)].filter(Boolean).join(" | "),
-    rate_type: "flexible",
-    rate_label: ratePlan,
-    cancellation_policy: policy,
-    payment_policy: "Pay at property",
-    enhancements: [],
-    disclosures: [],
-    fee_breakdown: [],
-    price: {
-      currency: currencyFallback,
-      per_night: nightly,
-      subtotal: total,
-      taxes_and_fees: 0,
-      total,
-    },
-  };
-}
-
-function normalizeRankedRoomToChatOffer(
-  raw: Record<string, unknown>,
-  currencyFallback: string,
-): ChatOffer {
-  const total = firstNumber(raw.price) ?? 0;
-  const name = firstString(raw.room_type_name, raw.room_type_id) ?? "Recommended room";
-  const ratePlanId = firstString(raw.rate_plan_id) ?? "rate-plan";
-  const reasons = toStringArray(raw.reasons).join(" | ");
-
-  return {
-    id: firstString(raw.rate_plan_id, raw.room_type_id) ?? "ranked-room",
-    name,
-    description: [ratePlanId, reasons].filter(Boolean).join(" | "),
-    rate_type: "flexible",
-    rate_label: ratePlanId,
-    cancellation_policy: "Offer details available.",
-    payment_policy: "Pay at property",
-    enhancements: [],
-    disclosures: [],
-    fee_breakdown: [],
-    price: {
-      currency: currencyFallback,
-      per_night: total,
-      subtotal: total,
-      taxes_and_fees: 0,
-      total,
-    },
-  };
-}
-
-export function getChatOffersFromResponse(data: ChatMessageResponse["data"]): ChatOffer[] {
-  const source = extractChatRecommendationSource(data);
-  if (!source) {
-    return [];
-  }
-
-  const currency = firstString(source.currency) ?? "USD";
-
-  if (isRecord(source.recommended_room)) {
-    return [normalizeRecommendedRoomToChatOffer(source.recommended_room, currency)];
-  }
-
-  if (Array.isArray(source.ranked_rooms) && isRecord(source.ranked_rooms[0])) {
-    return [normalizeRankedRoomToChatOffer(source.ranked_rooms[0], currency)];
-  }
-
-  return [];
-}
-
 function toRecommendedRoomPriceRows(value: unknown): Array<{ label: string; amount: number }> {
   if (isRecord(value)) {
     const groups = new Map<string, { total: number | null; perNight: number | null; flatFee: number | null }>();
@@ -793,6 +737,162 @@ export function getChatRecommendedRoomFromResponse(
   return null;
 }
 
+function normalizeChatSlotHints(value: unknown): ChatResponseUiQuestion["slotHints"] | undefined {
+  const raw = isRecord(value) ? value : {};
+  const missingRequired = toStringArray(raw.missingRequired ?? raw.missing_required);
+  const collected = toStringArray(raw.collected);
+
+  if (missingRequired.length === 0 && collected.length === 0) {
+    return undefined;
+  }
+
+  return {
+    missingRequired,
+    collected,
+  };
+}
+
+function normalizeChatTargetSlots(value: unknown): string[] | undefined {
+  const targetSlots = toStringArray(value);
+  return targetSlots.length > 0 ? targetSlots : undefined;
+}
+
+function normalizeChatAnswerMode(value: unknown): ChatAnswerMode | null {
+  if (value === "yes_no" || value === "numeric" || value === "single_choice" || value === "free_text") {
+    return value;
+  }
+  return null;
+}
+
+function normalizeChatResponseOptions(value: unknown): ChatResponseUiOption[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((entry) => {
+    if (typeof entry === "string") {
+      const normalized = entry.trim();
+      return normalized ? [{ label: normalized, value: normalized }] : [];
+    }
+
+    if (!isRecord(entry)) {
+      return [];
+    }
+
+    const label = firstString(entry.label, entry.text, entry.name, entry.value);
+    const optionValue = firstString(entry.value, entry.id, entry.key, entry.label, entry.text);
+    if (!label || !optionValue) {
+      return [];
+    }
+
+    return [{
+      label,
+      value: optionValue,
+      description: firstString(entry.description, entry.helper) ?? null,
+    }];
+  });
+}
+
+function normalizeResponseUi(value: unknown): ChatResponseUi | null {
+  if (!isRecord(value) || typeof value.type !== "string") {
+    return null;
+  }
+
+  const answerMode =
+    normalizeChatAnswerMode(value.answerMode) ??
+    normalizeChatAnswerMode(value.input) ??
+    normalizeChatAnswerMode(value.variant);
+  const targetSlots = normalizeChatTargetSlots(value.targetSlots ?? value.target_slots);
+  const slotHints = normalizeChatSlotHints(value.slotHints);
+
+  if (value.type === "question") {
+    return {
+      type: "question",
+      answerMode: answerMode ?? "free_text",
+      targetSlots,
+      slotHints,
+    };
+  }
+
+  if (value.type === "confirmation") {
+    return {
+      type: "confirmation",
+      answerMode: answerMode ?? "yes_no",
+      targetSlots,
+      slotHints,
+      summary: isRecord(value.summary) ? value.summary : null,
+    };
+  }
+
+  if (value.type === "selection") {
+    return {
+      type: "selection",
+      answerMode: answerMode ?? "single_choice",
+      targetSlots,
+      slotHints,
+      options: normalizeChatResponseOptions(value.options),
+    };
+  }
+
+  if (value.type === "offer_recommendation") {
+    return {
+      type: "offer_recommendation",
+      showRecommendedRoom: Boolean(value.showRecommendedRoom),
+      showRecommendedOffers: Boolean(value.showRecommendedOffers),
+      showRankedRooms: Boolean(value.showRankedRooms),
+    };
+  }
+
+  if (value.type === "error") {
+    return {
+      type: "error",
+      retryable: Boolean(value.retryable),
+    };
+  }
+
+  return null;
+}
+
+export function getChatResponseUi(data: ChatMessageResponse["data"]): ChatResponseUi {
+  const explicit = normalizeResponseUi((data as Record<string, unknown>).responseUi);
+  if (explicit) {
+    return explicit;
+  }
+
+  if (data.status === "ERROR") {
+    return {
+      type: "error",
+      retryable: false,
+    };
+  }
+
+  if (getChatRecommendedRoomFromResponse(data)) {
+    return {
+      type: "offer_recommendation",
+      showRecommendedRoom: true,
+      showRecommendedOffers: false,
+      showRankedRooms: false,
+    };
+  }
+
+  if (data.nextAction === "CONFIRM") {
+    return {
+      type: "confirmation",
+      answerMode: "yes_no",
+      targetSlots: undefined,
+      slotHints: undefined,
+      summary: null,
+    };
+  }
+
+  return {
+    type: "question",
+    answerMode: "free_text",
+    targetSlots: undefined,
+    slotHints: undefined,
+  };
+}
+
 function buildQueryString(params: Record<string, string | number | boolean | undefined>) {
   const searchParams = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
@@ -906,6 +1006,12 @@ export async function sendChatSessionMessage(
       status: "OK",
       nextAction: "PRESENT_OFFERS",
       slots: {},
+      responseUi: {
+        type: "offer_recommendation",
+        showRecommendedRoom: true,
+        showRecommendedOffers: false,
+        showRankedRooms: false,
+      },
       commerce: {
         currency: "USD",
         recommended_room: {

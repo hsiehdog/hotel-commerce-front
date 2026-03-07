@@ -1,19 +1,25 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  getChatOffersFromResponse,
   getChatRecommendedRoomFromResponse,
+  getChatResponseUi,
   type ChatMessageResponse,
 } from "@/lib/api-client";
 
-describe("getChatOffersFromResponse", () => {
-  it("maps recommended_room when present", () => {
+describe("getChatResponseUi", () => {
+  it("returns explicit responseUi when present", () => {
     const data: ChatMessageResponse["data"] = {
       sessionId: "session-1",
       assistantMessage: "Here is your recommendation",
       status: "OK",
       nextAction: "PRESENT_OFFERS",
       slots: {},
+      responseUi: {
+        type: "offer_recommendation",
+        showRecommendedRoom: true,
+        showRecommendedOffers: false,
+        showRankedRooms: false,
+      },
       commerce: {
         currency: "USD",
         recommended_room: {
@@ -28,19 +34,17 @@ describe("getChatOffersFromResponse", () => {
       },
     };
 
-    const offers = getChatOffersFromResponse(data);
-    expect(offers).toHaveLength(1);
-    expect(offers[0]?.name).toBe("Family Suite");
-    expect(offers[0]?.price.total).toBe(987);
+    expect(getChatResponseUi(data)).toEqual(data.responseUi);
   });
 
-  it("falls back to the first ranked room when recommended_room is absent", () => {
+  it("falls back to offer_recommendation when responseUi is missing and ranked_rooms exist", () => {
     const data: ChatMessageResponse["data"] = {
       sessionId: "session-1",
       assistantMessage: "Best available option",
       status: "OK",
       nextAction: "PRESENT_OFFERS",
       slots: {},
+      responseUi: undefined as never,
       commerce: {
         currency: "USD",
         ranked_rooms: [
@@ -55,19 +59,22 @@ describe("getChatOffersFromResponse", () => {
       },
     };
 
-    const offers = getChatOffersFromResponse(data);
-    expect(offers).toHaveLength(1);
-    expect(offers[0]?.name).toBe("Family Suite");
-    expect(offers[0]?.price.total).toBe(987);
+    expect(getChatResponseUi(data)).toEqual({
+      type: "offer_recommendation",
+      showRecommendedRoom: true,
+      showRecommendedOffers: false,
+      showRankedRooms: false,
+    });
   });
 
-  it("returns empty array when neither recommended_room nor ranked_rooms is present", () => {
+  it("falls back to confirmation when responseUi is missing and nextAction is confirm", () => {
     const data: ChatMessageResponse["data"] = {
       sessionId: "session-1",
       assistantMessage: "No recommendation",
       status: "OK",
       nextAction: "CONFIRM",
       slots: {},
+      responseUi: undefined as never,
       commerce: {
         fallback: {
           type: "suggest_alternate_dates",
@@ -77,7 +84,13 @@ describe("getChatOffersFromResponse", () => {
       },
     };
 
-    expect(getChatOffersFromResponse(data)).toEqual([]);
+    expect(getChatResponseUi(data)).toEqual({
+      type: "confirmation",
+      answerMode: "yes_no",
+      targetSlots: undefined,
+      slotHints: undefined,
+      summary: null,
+    });
   });
 });
 
@@ -89,6 +102,12 @@ describe("getChatRecommendedRoomFromResponse", () => {
       status: "OK",
       nextAction: "PRESENT_OFFERS",
       slots: {},
+      responseUi: {
+        type: "offer_recommendation",
+        showRecommendedRoom: true,
+        showRecommendedOffers: false,
+        showRankedRooms: false,
+      },
       commerce: {
         currency: "USD",
         recommended_room: {

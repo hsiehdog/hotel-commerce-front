@@ -14,12 +14,15 @@ import {
 
 import { DemoChatMessage, DemoChatMessageItem } from "@/components/chat/demo-chat-message";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import {
   ApiClientRequestError,
+  ChatAnswerMode,
   ChatMessageRequest,
+  getChatResponseUi,
   ChatSession,
   createChatSession,
   fetchProperties,
@@ -38,6 +41,11 @@ const RETRY_STORAGE_KEY = "demo-chat-retry";
 type RetryBuffer = {
   sessionId: string;
   payload: ChatMessageRequest;
+};
+
+type SendOptions = {
+  composerOverride?: string;
+  bypassDebounce?: boolean;
 };
 
 type NormalizedError = {
@@ -207,6 +215,52 @@ function getDeviceType() {
   return window.innerWidth < 768 ? "mobile" : "desktop";
 }
 
+function getLatestConfirmationMessageId(messages: DemoChatMessageItem[]): string | null {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.role !== "assistant" || !message.responseUi) {
+      continue;
+    }
+
+    if (
+      (message.responseUi.type === "confirmation" || message.responseUi.type === "question") &&
+      message.responseUi.answerMode === "yes_no"
+    ) {
+      return message.id;
+    }
+
+    if (
+      message.responseUi.type === "selection" &&
+      message.responseUi.answerMode === "single_choice" &&
+      message.responseUi.options.length > 0
+    ) {
+      return message.id;
+    }
+
+    return null;
+  }
+
+  return null;
+}
+
+function getLatestPromptMessage(messages: DemoChatMessageItem[]): DemoChatMessageItem | null {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.role === "assistant" && message.responseUi) {
+      return message;
+    }
+  }
+
+  return null;
+}
+
+function toTargetSlotLabel(value: string): string {
+  return value
+    .replace(/_/g, " ")
+    .trim()
+    .replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
 export function DemoChatDashboard() {
   const pathname = usePathname();
   const router = useRouter();
@@ -245,6 +299,20 @@ export function DemoChatDashboard() {
   const isRateLimited = Boolean(
     state.uiFlags.rateLimitedUntil && new Date(state.uiFlags.rateLimitedUntil).getTime() > Date.now(),
   );
+  const activeConfirmationMessageId = useMemo(
+    () => getLatestConfirmationMessageId(state.messages),
+    [state.messages],
+  );
+  const activePromptMessage = useMemo(
+    () => getLatestPromptMessage(state.messages),
+    [state.messages],
+  );
+  const activeResponseUi = activePromptMessage?.responseUi;
+  const activeAnswerMode: ChatAnswerMode =
+    activeResponseUi && "answerMode" in activeResponseUi ? activeResponseUi.answerMode : "free_text";
+  const activeTargetSlots =
+    activeResponseUi && "targetSlots" in activeResponseUi ? activeResponseUi.targetSlots ?? [] : [];
+  const isStructuredReplyMode = activeAnswerMode === "yes_no" || activeAnswerMode === "single_choice";
   const rateLimitSeconds = state.uiFlags.rateLimitedUntil
     ? Math.max(0, Math.ceil((new Date(state.uiFlags.rateLimitedUntil).getTime() - Date.now()) / 1000))
     : 0;
@@ -368,7 +436,7 @@ export function DemoChatDashboard() {
     }
   }, [state.chatSession, state.uiFlags.sessionExpired]);
 
-  async function handleSend(payloadOverride?: RetryBuffer) {
+  async function handleSend(payloadOverride?: RetryBuffer, options?: SendOptions) {
     if (!state.chatSession || state.pendingRequest) {
       return;
     }
@@ -383,11 +451,11 @@ export function DemoChatDashboard() {
       return;
     }
 
-    if (!payloadOverride && Date.now() - lastSendRef.current < SEND_DEBOUNCE_MS) {
+    if (!payloadOverride && !options?.bypassDebounce && Date.now() - lastSendRef.current < SEND_DEBOUNCE_MS) {
       return;
     }
 
-    const trimmed = composerValue.trim();
+    const trimmed = (options?.composerOverride ?? composerValue).trim();
     if (!payloadOverride && !trimmed) {
       return;
     }
@@ -455,6 +523,7 @@ export function DemoChatDashboard() {
     try {
       const response = await sendChatSessionMessage(state.chatSession.sessionId, payload);
       const latencyMs = Math.round(performance.now() - startedAt);
+      const responseUi = getChatResponseUi(response);
       const recommendedRoom = getChatRecommendedRoomFromResponse(response);
 
       dispatch({
@@ -466,9 +535,11 @@ export function DemoChatDashboard() {
           createdAt: nowIso(),
           status: response.status,
           nextAction: response.nextAction,
+          pendingAction: response.pendingAction ?? null,
+          responseUi,
           recommendedRoom,
           decisionId: response.decisionId,
-          isRetryable: response.status === "ERROR",
+          isRetryable: responseUi.type === "error" ? Boolean(responseUi.retryable) : false,
         },
       });
 
@@ -478,7 +549,7 @@ export function DemoChatDashboard() {
         latencyMs,
       });
 
-      if (response.status === "OK" && recommendedRoom) {
+      if (responseUi.type === "offer_recommendation" && recommendedRoom) {
         emitChatTelemetry("chat_offers_presented", {
           sessionId: response.sessionId,
           clientMessageId: payload.clientMessageId,
@@ -579,6 +650,14 @@ export function DemoChatDashboard() {
     await handleSend();
   }
 
+  async function handleConfirmationReply(value: "yes" | "no") {
+    await handleSend(undefined, { composerOverride: value, bypassDebounce: true });
+  }
+
+  async function handleOptionSelect(value: string) {
+    await handleSend(undefined, { composerOverride: value, bypassDebounce: true });
+  }
+
   async function handleRetry() {
     if (!state.retryBuffer) {
       return;
@@ -649,6 +728,17 @@ export function DemoChatDashboard() {
       <Card className="border-muted">
         <CardHeader>
           <CardTitle className="text-lg">AI Conversation</CardTitle>
+          <CardAction>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={handleRestart}
+              disabled={isSessionLoading || state.pendingRequest}
+            >
+              Start new chat
+            </Button>
+          </CardAction>
           <CardDescription>
             Session: {state.chatSession?.sessionId ?? "Not ready"}
           </CardDescription>
@@ -662,12 +752,7 @@ export function DemoChatDashboard() {
 
           {state.uiFlags.sessionExpired ? (
             <div className="rounded-md border border-amber-500/50 bg-amber-500/10 p-3 text-sm text-amber-900">
-              Session expired, start new chat.
-              <div className="mt-2">
-                <Button type="button" size="sm" variant="outline" onClick={handleRestart}>
-                  Start new chat
-                </Button>
-              </div>
+              Session expired, start a new chat from the header button.
             </div>
           ) : null}
 
@@ -692,7 +777,15 @@ export function DemoChatDashboard() {
               ) : null}
 
               {state.messages.map((message) => (
-                <DemoChatMessage key={message.id} message={message} onRetry={handleRetry} />
+                <DemoChatMessage
+                  key={message.id}
+                  message={message}
+                  showConfirmationActions={message.id === activeConfirmationMessageId && !state.pendingRequest}
+                  confirmationPending={state.pendingRequest}
+                  onConfirmationReply={(value) => void handleConfirmationReply(value)}
+                  onSelectOption={(value) => void handleOptionSelect(value)}
+                  onRetry={handleRetry}
+                />
               ))}
 
               {state.pendingRequest ? (
@@ -704,13 +797,53 @@ export function DemoChatDashboard() {
           </ScrollArea>
 
           <form onSubmit={handleSubmit} className="space-y-3">
-            <Textarea
-              placeholder="Type your request..."
-              value={composerValue}
-              onChange={(event) => setComposerValue(event.target.value)}
-              className="min-h-[96px] resize-none"
-              maxLength={MAX_MESSAGE_LENGTH + 100}
-            />
+            {activeAnswerMode === "numeric" ? (
+              <Input
+                type="number"
+                inputMode="numeric"
+                placeholder={
+                  activeTargetSlots.length > 0
+                    ? `Enter ${toTargetSlotLabel(activeTargetSlots[0])}`
+                    : "Enter a number"
+                }
+                value={composerValue}
+                onChange={(event) => setComposerValue(event.target.value)}
+                disabled={
+                  state.pendingRequest ||
+                  isSessionLoading ||
+                  !state.chatSession ||
+                  state.uiFlags.sessionExpired ||
+                  isRateLimited
+                }
+              />
+            ) : (
+              <Textarea
+                placeholder={
+                  isStructuredReplyMode
+                    ? "Use the reply buttons above"
+                    : activeTargetSlots.length > 0
+                      ? `Answer for ${activeTargetSlots.map(toTargetSlotLabel).join(", ")}`
+                      : "Type your request..."
+                }
+                value={composerValue}
+                onChange={(event) => setComposerValue(event.target.value)}
+                className="min-h-[96px] resize-none"
+                maxLength={MAX_MESSAGE_LENGTH + 100}
+                disabled={
+                  isStructuredReplyMode ||
+                  state.pendingRequest ||
+                  isSessionLoading ||
+                  !state.chatSession ||
+                  state.uiFlags.sessionExpired ||
+                  isRateLimited
+                }
+              />
+            )}
+            {activeTargetSlots.length > 0 ? (
+              <p className="text-xs text-muted-foreground">
+                Waiting for: {activeTargetSlots.map(toTargetSlotLabel).join(", ")}
+              </p>
+            ) : null}
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs text-muted-foreground">
                 {composerValue.length}/{MAX_MESSAGE_LENGTH}
@@ -728,6 +861,7 @@ export function DemoChatDashboard() {
                 <Button
                   type="submit"
                   disabled={
+                    isStructuredReplyMode ||
                     state.pendingRequest ||
                     isSessionLoading ||
                     !state.chatSession ||

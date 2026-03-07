@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
+import { within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -87,6 +88,7 @@ describe("DemoChatDashboard", () => {
     });
 
     expect(await screen.findByText("Hello from backend")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Start new chat" })).toBeTruthy();
   });
 
   it("renders single recommended room from new commerce payload", async () => {
@@ -97,6 +99,12 @@ describe("DemoChatDashboard", () => {
       status: "OK",
       nextAction: "PRESENT_OFFERS",
       slots: {},
+      responseUi: {
+        type: "offer_recommendation",
+        showRecommendedRoom: true,
+        showRecommendedOffers: false,
+        showRankedRooms: false,
+      },
       commerce: {
         currency: "USD",
         recommended_room: {
@@ -124,17 +132,26 @@ describe("DemoChatDashboard", () => {
     expect(await screen.findByText("Recommended Room")).toBeTruthy();
     expect(screen.getByText("Family Suite | Flexible Rate")).toBeTruthy();
     expect(screen.getByText("$987.00")).toBeTruthy();
-    expect(screen.queryByText("I found a recommendation")).toBeNull();
+    expect(screen.getByText("I found a recommendation")).toBeTruthy();
   });
 
-  it("does not render offers list when recommended_room is absent", async () => {
+  it("renders question UI without slot hint badges", async () => {
     const user = userEvent.setup();
     mockedSendChatSessionMessage.mockResolvedValue({
       sessionId: "session-1",
-      assistantMessage: "No room could be recommended right now.",
-      status: "OK",
-      nextAction: "CONFIRM",
+      assistantMessage: "What dates are you looking for?",
+      status: "NEEDS_CLARIFICATION",
+      nextAction: "ASK_QUESTION",
       slots: {},
+      responseUi: {
+        type: "question",
+        answerMode: "free_text",
+        targetSlots: ["check_in", "check_out"],
+        slotHints: {
+          missingRequired: ["check_in", "check_out"],
+          collected: ["adults"],
+        },
+      },
       commerce: {
         recommended_room: null,
         recommended_offers: [],
@@ -153,7 +170,246 @@ describe("DemoChatDashboard", () => {
     await user.type(screen.getByPlaceholderText("Type your request..."), "Show recommendation");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
-    expect(await screen.findByText("No room could be recommended right now.")).toBeTruthy();
+    expect(await screen.findByText("What dates are you looking for?")).toBeTruthy();
+    expect(screen.getByText("Waiting for: Check In, Check Out")).toBeTruthy();
+    expect(screen.queryByText("Need Check In")).toBeNull();
+    expect(screen.queryByText("Need Check Out")).toBeNull();
+    expect(screen.queryByText("Have Adults")).toBeNull();
     expect(screen.queryByText("Recommended Room")).toBeNull();
+  });
+
+  it("renders yes/no confirmation prompt without summary details", async () => {
+    const user = userEvent.setup();
+    mockedSendChatSessionMessage.mockResolvedValue({
+      sessionId: "session-1",
+      assistantMessage: "Please confirm these stay details.",
+      status: "OK",
+      nextAction: "CONFIRM",
+      slots: {},
+      responseUi: {
+        type: "confirmation",
+        answerMode: "yes_no",
+        targetSlots: ["confirm_dates"],
+        summary: {
+          check_in: "2026-06-10",
+          check_out: "2026-06-12",
+          adults: 2,
+        },
+      },
+      commerce: {},
+    });
+
+    renderDashboard();
+
+    await screen.findByText("Hello from backend");
+    await user.type(screen.getByPlaceholderText("Type your request..."), "Continue");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByText("Please confirm these stay details.")).toBeTruthy();
+    expect(screen.queryByText("Review details")).toBeNull();
+    expect(screen.queryByText("Check In")).toBeNull();
+    expect(screen.queryByText("2026-06-10")).toBeNull();
+    expect(screen.queryByText("Check Out")).toBeNull();
+    const promptContainer = screen.getByText("Please confirm these stay details.").closest("div");
+    expect(promptContainer).toBeTruthy();
+    expect(within(promptContainer as HTMLElement).getByRole("button", { name: "Yes" })).toBeTruthy();
+    expect(within(promptContainer as HTMLElement).getByRole("button", { name: "No" })).toBeTruthy();
+    expect(screen.getByPlaceholderText("Use the reply buttons above")).toBeTruthy();
+  });
+
+  it("renders confirm_offer_recap details in a recap table", async () => {
+    const user = userEvent.setup();
+    mockedSendChatSessionMessage.mockResolvedValue({
+      sessionId: "session-1",
+      assistantMessage: "Please confirm this offer recap.",
+      status: "OK",
+      nextAction: "CONFIRM",
+      pendingAction: {
+        type: "confirm_offer_recap",
+        answerMode: "yes_no",
+        source: "offer_engine",
+        targetSlots: ["offer_recap_confirmation"],
+        proposedPatch: {
+          room_type_name: "Family Suite",
+          rate_plan_name: "Flexible Rate",
+          total_price: 987,
+          currency: "USD",
+          check_in: "2026-06-10",
+          check_out: "2026-06-12",
+        },
+      },
+      slots: {},
+      responseUi: {
+        type: "confirmation",
+        answerMode: "yes_no",
+        targetSlots: ["offer_recap_confirmation"],
+        summary: {
+          adults: 2,
+          children: 1,
+        },
+      },
+      commerce: {},
+    });
+
+    renderDashboard();
+
+    await screen.findByText("Hello from backend");
+    await user.type(screen.getByPlaceholderText("Type your request..."), "Show me the offer");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByText("Please confirm this offer recap.")).toBeTruthy();
+    expect(screen.getByText("Room Type Name")).toBeTruthy();
+    expect(screen.getByText("Family Suite")).toBeTruthy();
+    expect(screen.getByText("Rate Plan Name")).toBeTruthy();
+    expect(screen.getByText("Flexible Rate")).toBeTruthy();
+    expect(screen.getByText("Total Price")).toBeTruthy();
+    expect(screen.getByText("987")).toBeTruthy();
+    expect(screen.getByText("Adults")).toBeTruthy();
+    expect(screen.getByText("2")).toBeTruthy();
+    expect(screen.getByText("Children")).toBeTruthy();
+    expect(screen.getByText("1")).toBeTruthy();
+  });
+
+  it("sends yes/no replies only when responseUi answerMode expects them", async () => {
+    const user = userEvent.setup();
+    mockedSendChatSessionMessage
+      .mockResolvedValueOnce({
+        sessionId: "session-1",
+        assistantMessage: "Will any children be traveling with you?",
+        status: "NEEDS_CLARIFICATION",
+        nextAction: "ASK_QUESTION",
+        slots: {},
+        responseUi: {
+          type: "question",
+          answerMode: "yes_no",
+          targetSlots: ["children_presence"],
+        },
+        commerce: {},
+      })
+      .mockResolvedValueOnce({
+        sessionId: "session-1",
+        assistantMessage: "Confirmed. I will keep those dates.",
+        status: "OK",
+        nextAction: "ASK_QUESTION",
+        slots: {},
+        responseUi: {
+          type: "question",
+          answerMode: "free_text",
+          targetSlots: ["children_count"],
+        },
+        commerce: {},
+      });
+
+    renderDashboard();
+
+    await screen.findByText("Hello from backend");
+    await user.type(screen.getByPlaceholderText("Type your request..."), "Next weekend");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    await screen.findByText("Will any children be traveling with you?");
+    await user.click(screen.getByRole("button", { name: "Yes" }));
+
+    await screen.findByText("Confirmed. I will keep those dates.");
+    expect(mockedSendChatSessionMessage).toHaveBeenNthCalledWith(
+      2,
+      "session-1",
+      expect.objectContaining({ message: "yes" }),
+    );
+    expect(screen.getByPlaceholderText("Answer for Children Count")).toBeTruthy();
+  });
+
+  it("renders retry action from error responseUi", async () => {
+    const user = userEvent.setup();
+    mockedSendChatSessionMessage
+      .mockResolvedValueOnce({
+        sessionId: "session-1",
+        assistantMessage: "Something went wrong. Try again.",
+        status: "ERROR",
+        nextAction: "ASK_QUESTION",
+        slots: {},
+        responseUi: {
+          type: "error",
+          retryable: true,
+        },
+        commerce: {},
+      })
+      .mockResolvedValueOnce({
+        sessionId: "session-1",
+        assistantMessage: "What dates are you looking for?",
+        status: "NEEDS_CLARIFICATION",
+        nextAction: "ASK_QUESTION",
+        slots: {},
+        responseUi: {
+          type: "question",
+          answerMode: "free_text",
+        },
+        commerce: {},
+      });
+
+    renderDashboard();
+
+    await screen.findByText("Hello from backend");
+    await user.type(screen.getByPlaceholderText("Type your request..."), "Hello");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByText("Something went wrong. Try again.")).toBeTruthy();
+    await user.click(screen.getAllByRole("button", { name: "Retry" })[0]);
+    expect(await screen.findByText("What dates are you looking for?")).toBeTruthy();
+    expect(mockedSendChatSessionMessage).toHaveBeenCalledTimes(2);
+  });
+
+  it("renders single-choice options from responseUi and submits the selected value", async () => {
+    const user = userEvent.setup();
+    mockedSendChatSessionMessage
+      .mockResolvedValueOnce({
+        sessionId: "session-1",
+        assistantMessage: "Choose a room view.",
+        status: "NEEDS_CLARIFICATION",
+        nextAction: "ASK_QUESTION",
+        pendingAction: "select_room_view",
+        slots: {},
+        responseUi: {
+          type: "selection",
+          answerMode: "single_choice",
+          targetSlots: ["room_view"],
+          options: [
+            { label: "City View", value: "city_view" },
+            { label: "Ocean View", value: "ocean_view" },
+          ],
+        },
+        commerce: {},
+      })
+      .mockResolvedValueOnce({
+        sessionId: "session-1",
+        assistantMessage: "Ocean view noted.",
+        status: "OK",
+        nextAction: "ASK_QUESTION",
+        slots: {},
+        responseUi: {
+          type: "question",
+          answerMode: "free_text",
+        },
+        commerce: {},
+      });
+
+    renderDashboard();
+
+    await screen.findByText("Hello from backend");
+    await user.type(screen.getByPlaceholderText("Type your request..."), "Find a room");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    await screen.findByText("Choose a room view.");
+    expect(screen.getByRole("button", { name: "City View" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Ocean View" })).toBeTruthy();
+    expect(screen.getByPlaceholderText("Use the reply buttons above")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Ocean View" }));
+
+    await screen.findByText("Ocean view noted.");
+    expect(mockedSendChatSessionMessage).toHaveBeenNthCalledWith(
+      2,
+      "session-1",
+      expect.objectContaining({ message: "ocean_view" }),
+    );
   });
 });
