@@ -1,6 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
-import { within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -171,7 +170,8 @@ describe("DemoChatDashboard", () => {
     await user.click(screen.getByRole("button", { name: "Send" }));
 
     expect(await screen.findByText("What dates are you looking for?")).toBeTruthy();
-    expect(screen.getByText("Waiting for: Check In, Check Out")).toBeTruthy();
+    expect(screen.getByPlaceholderText('Answer for "What dates are you looking for?"')).toBeTruthy();
+    expect(screen.queryByText("Waiting for: Check In, Check Out")).toBeNull();
     expect(screen.queryByText("Need Check In")).toBeNull();
     expect(screen.queryByText("Need Check Out")).toBeNull();
     expect(screen.queryByText("Have Adults")).toBeNull();
@@ -210,18 +210,17 @@ describe("DemoChatDashboard", () => {
     expect(screen.queryByText("Check In")).toBeNull();
     expect(screen.queryByText("2026-06-10")).toBeNull();
     expect(screen.queryByText("Check Out")).toBeNull();
-    const promptContainer = screen.getByText("Please confirm these stay details.").closest("div");
-    expect(promptContainer).toBeTruthy();
-    expect(within(promptContainer as HTMLElement).getByRole("button", { name: "Yes" })).toBeTruthy();
-    expect(within(promptContainer as HTMLElement).getByRole("button", { name: "No" })).toBeTruthy();
-    expect(screen.getByPlaceholderText("Use the reply buttons above")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Yes" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "No" })).toBeNull();
+    expect(screen.getByPlaceholderText('Answer for "Please confirm these stay details."')).toBeTruthy();
   });
 
   it("renders confirm_offer_recap details in a recap table", async () => {
     const user = userEvent.setup();
     mockedSendChatSessionMessage.mockResolvedValue({
       sessionId: "session-1",
-      assistantMessage: "Please confirm this offer recap.",
+      assistantMessage:
+        "Just to confirm, here are the details I have: check-in Friday, April 3, 2026, check-out Sunday, April 5, 2026, nights 2, adults 2, rooms 1, children 0. Is this correct?",
       status: "OK",
       nextAction: "CONFIRM",
       pendingAction: {
@@ -257,7 +256,8 @@ describe("DemoChatDashboard", () => {
     await user.type(screen.getByPlaceholderText("Type your request..."), "Show me the offer");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
-    expect(await screen.findByText("Please confirm this offer recap.")).toBeTruthy();
+    expect(await screen.findByText("Just to confirm, here are the details I have: Is this correct?")).toBeTruthy();
+    expect(screen.queryByText(/check-out Sunday, April 5, 2026/)).toBeNull();
     expect(screen.getByText("Room Type Name")).toBeTruthy();
     expect(screen.getByText("Family Suite")).toBeTruthy();
     expect(screen.getByText("Rate Plan Name")).toBeTruthy();
@@ -307,7 +307,8 @@ describe("DemoChatDashboard", () => {
     await user.click(screen.getByRole("button", { name: "Send" }));
 
     await screen.findByText("Will any children be traveling with you?");
-    await user.click(screen.getByRole("button", { name: "Yes" }));
+    await user.type(screen.getByPlaceholderText('Answer for "Will any children be traveling with you?"'), "yes");
+    await user.click(screen.getByRole("button", { name: "Send" }));
 
     await screen.findByText("Confirmed. I will keep those dates.");
     expect(mockedSendChatSessionMessage).toHaveBeenNthCalledWith(
@@ -315,7 +316,7 @@ describe("DemoChatDashboard", () => {
       "session-1",
       expect.objectContaining({ message: "yes" }),
     );
-    expect(screen.getByPlaceholderText("Answer for Children Count")).toBeTruthy();
+    expect(screen.getByPlaceholderText('Answer for "Confirmed. I will keep those dates."')).toBeTruthy();
   });
 
   it("renders retry action from error responseUi", async () => {
@@ -358,7 +359,7 @@ describe("DemoChatDashboard", () => {
     expect(mockedSendChatSessionMessage).toHaveBeenCalledTimes(2);
   });
 
-  it("renders single-choice options from responseUi and submits the selected value", async () => {
+  it("uses typed input for single-choice turns instead of option buttons", async () => {
     const user = userEvent.setup();
     mockedSendChatSessionMessage
       .mockResolvedValueOnce({
@@ -399,11 +400,10 @@ describe("DemoChatDashboard", () => {
     await user.click(screen.getByRole("button", { name: "Send" }));
 
     await screen.findByText("Choose a room view.");
-    expect(screen.getByRole("button", { name: "City View" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Ocean View" })).toBeTruthy();
-    expect(screen.getByPlaceholderText("Use the reply buttons above")).toBeTruthy();
-
-    await user.click(screen.getByRole("button", { name: "Ocean View" }));
+    expect(screen.queryByRole("button", { name: "City View" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Ocean View" })).toBeNull();
+    await user.type(screen.getByPlaceholderText('Answer for "Choose a room view."'), "ocean_view");
+    await user.click(screen.getByRole("button", { name: "Send" }));
 
     await screen.findByText("Ocean view noted.");
     expect(mockedSendChatSessionMessage).toHaveBeenNthCalledWith(

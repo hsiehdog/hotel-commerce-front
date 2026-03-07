@@ -5,11 +5,14 @@ import {
   ChatNextAction,
   ChatPendingAction,
   ChatMessageStatus,
-  ChatResponseUiOption,
   ChatResponseUi,
 } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 import { ChatOffersList } from "@/components/chat/chat-offers-list";
+import {
+  getDisplayPromptText,
+  isConfirmOfferRecapMessage,
+} from "@/components/chat/chat-message-helpers";
 
 export type DemoChatMessageItem = {
   id: string;
@@ -28,26 +31,8 @@ export type DemoChatMessageItem = {
 
 type DemoChatMessageProps = {
   message: DemoChatMessageItem;
-  showConfirmationActions?: boolean;
-  onConfirmationReply?: (value: "yes" | "no") => void;
-  onSelectOption?: (value: string) => void;
-  confirmationPending?: boolean;
   onRetry?: () => void;
 };
-
-function formatTimestamp(value?: string) {
-  if (!value) {
-    return "Just now";
-  }
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return date.toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 function formatPendingAction(value: ChatPendingAction | null | undefined): string | null {
   if (!value) {
@@ -123,11 +108,17 @@ function formatRecapValue(value: unknown): string | null {
 }
 
 function buildRecapRows(message: DemoChatMessageItem): RecapRow[] {
+  if (!isConfirmOfferRecapMessage(message)) {
+    return [];
+  }
+
+  const responseUi = message.responseUi;
+  const pendingAction = message.pendingAction;
   if (
-    !message.pendingAction ||
-    typeof message.pendingAction === "string" ||
-    message.pendingAction.type !== "confirm_offer_recap" ||
-    message.responseUi?.type !== "confirmation"
+    !responseUi ||
+    responseUi.type !== "confirmation" ||
+    !pendingAction ||
+    typeof pendingAction === "string"
   ) {
     return [];
   }
@@ -143,12 +134,12 @@ function buildRecapRows(message: DemoChatMessageItem): RecapRow[] {
     rows.push({ label, value: formatted });
   };
 
-  const summary = message.responseUi.summary ?? {};
+  const summary = responseUi.summary ?? {};
   for (const [key, value] of Object.entries(summary)) {
     pushRow(`summary:${key}`, toTitleCase(key), value);
   }
 
-  const proposedPatch = message.pendingAction.proposedPatch;
+  const proposedPatch = pendingAction.proposedPatch;
   if (proposedPatch && typeof proposedPatch === "object") {
     for (const [key, value] of Object.entries(proposedPatch as Record<string, unknown>)) {
       pushRow(`patch:${key}`, toTitleCase(key), value);
@@ -160,10 +151,6 @@ function buildRecapRows(message: DemoChatMessageItem): RecapRow[] {
 
 export function DemoChatMessage({
   message,
-  showConfirmationActions = false,
-  onConfirmationReply,
-  onSelectOption,
-  confirmationPending = false,
   onRetry,
 }: DemoChatMessageProps) {
   const isUser = message.role === "user";
@@ -176,20 +163,9 @@ export function DemoChatMessage({
     responseUi?.type === "offer_recommendation" &&
     responseUi.showRecommendedRoom !== false &&
     Boolean(message.recommendedRoom);
-  const showConfirmationActionsInline =
-    !isUser &&
-    (responseUi?.type === "confirmation" || responseUi?.type === "question") &&
-    responseUi.answerMode === "yes_no" &&
-    showConfirmationActions &&
-    Boolean(onConfirmationReply);
-  const showSelectionActionsInline =
-    !isUser &&
-    responseUi?.type === "selection" &&
-    responseUi.answerMode === "single_choice" &&
-    showConfirmationActions &&
-    Boolean(onSelectOption) &&
-    responseUi.options.length > 0;
   const showErrorActions = !isUser && responseUi?.type === "error";
+  const displayText = getDisplayPromptText(message);
+  const showAssistantSpeechBubble = !isUser && Boolean(displayText);
 
   return (
     <div className={cn("flex w-full", isUser ? "justify-end" : "justify-start")}>
@@ -197,13 +173,20 @@ export function DemoChatMessage({
         className={cn(
           "text-sm",
           showOfferCard ? "max-w-full sm:max-w-[92%]" : "max-w-[92%] sm:max-w-[80%]",
-          showOfferCard ? "rounded-none border-0 bg-transparent px-0 py-0 shadow-none" : "rounded-2xl border px-4 py-2 shadow-sm",
-          isUser ? "bg-primary text-primary-foreground" : showOfferCard ? "text-foreground" : "bg-muted/60 text-foreground",
+          isUser
+            ? "rounded-2xl border border-slate-200 bg-slate-100 px-4 py-3 text-slate-900 shadow-sm"
+            : "px-0 py-1 text-foreground",
           message.isOptimistic ? "opacity-70" : "opacity-100",
         )}
       >
-        {message.text ? (
-          <p className="whitespace-pre-wrap leading-relaxed">{message.text}</p>
+        {displayText ? (
+          showAssistantSpeechBubble ? (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 shadow-sm">
+              <p className="whitespace-pre-wrap leading-7">{displayText}</p>
+            </div>
+          ) : (
+            <p className="whitespace-pre-wrap leading-7">{displayText}</p>
+          )
         ) : null}
         {!isUser && shouldShowDebugBadges && message.status ? (
           <div className="mt-2 flex flex-wrap gap-1">
@@ -215,65 +198,25 @@ export function DemoChatMessage({
         ) : null}
 
         {!isUser && showOfferCard ? (
-          <ChatOffersList recommendedRoom={message.recommendedRoom ?? null} />
+          <div className="mt-3 overflow-hidden rounded-3xl border border-border/60 bg-muted/70 p-3">
+            <ChatOffersList recommendedRoom={message.recommendedRoom ?? null} />
+          </div>
         ) : null}
 
         {!isUser && recapRows.length > 0 ? (
-          <div className="mt-3 overflow-hidden rounded-xl border bg-background/80">
+          <div className="mt-3 overflow-hidden rounded-3xl border border-border/60 bg-muted/70">
             <table className="w-full text-left text-sm">
               <tbody>
                 {recapRows.map((row) => (
                   <tr key={row.label} className="border-t first:border-t-0">
-                    <th className="w-2/5 bg-muted/40 px-3 py-2 font-medium text-foreground/80">
+                    <th className="w-2/5 bg-background/40 px-4 py-3 font-medium text-foreground/70">
                       {row.label}
                     </th>
-                    <td className="px-3 py-2 text-foreground">{row.value}</td>
+                    <td className="px-4 py-3 text-foreground">{row.value}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
-        ) : null}
-
-        {!isUser && showConfirmationActionsInline ? (
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Button
-              type="button"
-              size="sm"
-              className="min-w-20 rounded-full"
-              disabled={confirmationPending}
-              onClick={() => onConfirmationReply?.("yes")}
-            >
-              Yes
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="min-w-20 rounded-full"
-              disabled={confirmationPending}
-              onClick={() => onConfirmationReply?.("no")}
-            >
-              No
-            </Button>
-          </div>
-        ) : null}
-
-        {!isUser && showSelectionActionsInline ? (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {responseUi.options.map((option: ChatResponseUiOption) => (
-              <Button
-                key={option.value}
-                type="button"
-                size="sm"
-                variant="outline"
-                className="rounded-full"
-                disabled={confirmationPending}
-                onClick={() => onSelectOption?.(option.value)}
-              >
-                {option.label}
-              </Button>
-            ))}
           </div>
         ) : null}
 
@@ -284,8 +227,6 @@ export function DemoChatMessage({
             </Button>
           </div>
         ) : null}
-
-        <p className="mt-2 text-xs text-muted-foreground/80">{formatTimestamp(message.createdAt)}</p>
       </div>
     </div>
   );

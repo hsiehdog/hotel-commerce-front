@@ -1,10 +1,11 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, RefreshCcw, SendHorizontal } from "lucide-react";
+import { Loader2, SendHorizontal } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   FormEvent,
+  KeyboardEvent,
   useEffect,
   useMemo,
   useReducer,
@@ -13,14 +14,13 @@ import {
 } from "react";
 
 import { DemoChatMessage, DemoChatMessageItem } from "@/components/chat/demo-chat-message";
+import { getDisplayPromptText } from "@/components/chat/chat-message-helpers";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import {
   ApiClientRequestError,
-  ChatAnswerMode,
   ChatMessageRequest,
   getChatResponseUi,
   ChatSession,
@@ -215,34 +215,6 @@ function getDeviceType() {
   return window.innerWidth < 768 ? "mobile" : "desktop";
 }
 
-function getLatestConfirmationMessageId(messages: DemoChatMessageItem[]): string | null {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    if (message?.role !== "assistant" || !message.responseUi) {
-      continue;
-    }
-
-    if (
-      (message.responseUi.type === "confirmation" || message.responseUi.type === "question") &&
-      message.responseUi.answerMode === "yes_no"
-    ) {
-      return message.id;
-    }
-
-    if (
-      message.responseUi.type === "selection" &&
-      message.responseUi.answerMode === "single_choice" &&
-      message.responseUi.options.length > 0
-    ) {
-      return message.id;
-    }
-
-    return null;
-  }
-
-  return null;
-}
-
 function getLatestPromptMessage(messages: DemoChatMessageItem[]): DemoChatMessageItem | null {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
@@ -254,11 +226,13 @@ function getLatestPromptMessage(messages: DemoChatMessageItem[]): DemoChatMessag
   return null;
 }
 
-function toTargetSlotLabel(value: string): string {
-  return value
-    .replace(/_/g, " ")
-    .trim()
-    .replace(/\b\w/g, (match) => match.toUpperCase());
+function buildComposerPlaceholder(message?: DemoChatMessageItem | null): string {
+  const prompt = getDisplayPromptText(message).trim();
+  if (!prompt) {
+    return "Type your request...";
+  }
+
+  return `Answer for "${prompt}"`;
 }
 
 export function DemoChatDashboard() {
@@ -299,23 +273,19 @@ export function DemoChatDashboard() {
   const isRateLimited = Boolean(
     state.uiFlags.rateLimitedUntil && new Date(state.uiFlags.rateLimitedUntil).getTime() > Date.now(),
   );
-  const activeConfirmationMessageId = useMemo(
-    () => getLatestConfirmationMessageId(state.messages),
-    [state.messages],
-  );
   const activePromptMessage = useMemo(
     () => getLatestPromptMessage(state.messages),
     [state.messages],
   );
-  const activeResponseUi = activePromptMessage?.responseUi;
-  const activeAnswerMode: ChatAnswerMode =
-    activeResponseUi && "answerMode" in activeResponseUi ? activeResponseUi.answerMode : "free_text";
-  const activeTargetSlots =
-    activeResponseUi && "targetSlots" in activeResponseUi ? activeResponseUi.targetSlots ?? [] : [];
-  const isStructuredReplyMode = activeAnswerMode === "yes_no" || activeAnswerMode === "single_choice";
   const rateLimitSeconds = state.uiFlags.rateLimitedUntil
     ? Math.max(0, Math.ceil((new Date(state.uiFlags.rateLimitedUntil).getTime() - Date.now()) / 1000))
     : 0;
+  const composerDisabled =
+    state.pendingRequest ||
+    isSessionLoading ||
+    !state.chatSession ||
+    state.uiFlags.sessionExpired ||
+    isRateLimited;
 
   useEffect(() => {
     endOfMessagesRef.current?.scrollIntoView?.({ behavior: "smooth" });
@@ -647,15 +617,16 @@ export function DemoChatDashboard() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    await handleSend();
+    await handleSend(undefined, { bypassDebounce: true });
   }
 
-  async function handleConfirmationReply(value: "yes" | "no") {
-    await handleSend(undefined, { composerOverride: value, bypassDebounce: true });
-  }
+  async function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key !== "Enter" || event.shiftKey) {
+      return;
+    }
 
-  async function handleOptionSelect(value: string) {
-    await handleSend(undefined, { composerOverride: value, bypassDebounce: true });
+    event.preventDefault();
+    await handleSend(undefined, { bypassDebounce: true });
   }
 
   async function handleRetry() {
@@ -701,7 +672,7 @@ export function DemoChatDashboard() {
 
   return (
     <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
-      <Card className="h-fit border-muted">
+      <Card className="h-fit border-border/60 bg-card/80 shadow-sm">
         <CardHeader>
           <CardTitle className="text-lg">Chat Setup</CardTitle>
           <CardDescription>Select a property to scope this conversation.</CardDescription>
@@ -725,14 +696,15 @@ export function DemoChatDashboard() {
         </CardContent>
       </Card>
 
-      <Card className="border-muted">
-        <CardHeader>
+      <Card className="border-border/60 bg-white shadow-sm">
+        <CardHeader className="border-b border-border/50 pb-4">
           <CardTitle className="text-lg">AI Conversation</CardTitle>
           <CardAction>
             <Button
               type="button"
               size="sm"
               variant="outline"
+              className="rounded-full bg-white"
               onClick={handleRestart}
               disabled={isSessionLoading || state.pendingRequest}
             >
@@ -743,7 +715,7 @@ export function DemoChatDashboard() {
             Session: {state.chatSession?.sessionId ?? "Not ready"}
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-4 pt-5">
           {state.lastError ? (
             <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
               {state.lastError.message}
@@ -762,8 +734,8 @@ export function DemoChatDashboard() {
             </div>
           ) : null}
 
-          <ScrollArea className="h-[50vh] min-h-[340px] rounded-lg border bg-background">
-            <div className="flex flex-col gap-3 p-4">
+          <ScrollArea className="h-[56vh] min-h-[340px]">
+            <div className="flex flex-col gap-6 px-3 py-2 sm:px-5">
               {isSessionLoading ? (
                 <div className="flex justify-center py-10 text-muted-foreground">
                   <Loader2 className="h-5 w-5 animate-spin" />
@@ -780,10 +752,6 @@ export function DemoChatDashboard() {
                 <DemoChatMessage
                   key={message.id}
                   message={message}
-                  showConfirmationActions={message.id === activeConfirmationMessageId && !state.pendingRequest}
-                  confirmationPending={state.pendingRequest}
-                  onConfirmationReply={(value) => void handleConfirmationReply(value)}
-                  onSelectOption={(value) => void handleOptionSelect(value)}
                   onRetry={handleRetry}
                 />
               ))}
@@ -796,78 +764,25 @@ export function DemoChatDashboard() {
             </div>
           </ScrollArea>
 
-          <form onSubmit={handleSubmit} className="space-y-3">
-            {activeAnswerMode === "numeric" ? (
-              <Input
-                type="number"
-                inputMode="numeric"
-                placeholder={
-                  activeTargetSlots.length > 0
-                    ? `Enter ${toTargetSlotLabel(activeTargetSlots[0])}`
-                    : "Enter a number"
-                }
-                value={composerValue}
-                onChange={(event) => setComposerValue(event.target.value)}
-                disabled={
-                  state.pendingRequest ||
-                  isSessionLoading ||
-                  !state.chatSession ||
-                  state.uiFlags.sessionExpired ||
-                  isRateLimited
-                }
-              />
-            ) : (
-              <Textarea
-                placeholder={
-                  isStructuredReplyMode
-                    ? "Use the reply buttons above"
-                    : activeTargetSlots.length > 0
-                      ? `Answer for ${activeTargetSlots.map(toTargetSlotLabel).join(", ")}`
-                      : "Type your request..."
-                }
-                value={composerValue}
-                onChange={(event) => setComposerValue(event.target.value)}
-                className="min-h-[96px] resize-none"
-                maxLength={MAX_MESSAGE_LENGTH + 100}
-                disabled={
-                  isStructuredReplyMode ||
-                  state.pendingRequest ||
-                  isSessionLoading ||
-                  !state.chatSession ||
-                  state.uiFlags.sessionExpired ||
-                  isRateLimited
-                }
-              />
-            )}
-            {activeTargetSlots.length > 0 ? (
-              <p className="text-xs text-muted-foreground">
-                Waiting for: {activeTargetSlots.map(toTargetSlotLabel).join(", ")}
-              </p>
-            ) : null}
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-xs text-muted-foreground">
-                {composerValue.length}/{MAX_MESSAGE_LENGTH}
-              </p>
+          <form
+            onSubmit={handleSubmit}
+            className="rounded-[28px] border border-border/60 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.08)]"
+          >
+            <Textarea
+              placeholder={buildComposerPlaceholder(activePromptMessage)}
+              value={composerValue}
+              onChange={(event) => setComposerValue(event.target.value)}
+              onKeyDown={(event) => void handleComposerKeyDown(event)}
+              className="min-h-[104px] resize-none border-0 bg-transparent px-1 py-1 text-[15px] shadow-none focus-visible:ring-0"
+              maxLength={MAX_MESSAGE_LENGTH + 100}
+              disabled={composerDisabled}
+            />
+            <div className="mt-3 flex items-end justify-end gap-3 border-t border-border/50 pt-3">
               <div className="flex items-center gap-2">
                 <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleRetry}
-                  disabled={!state.retryBuffer || state.pendingRequest}
-                >
-                  <RefreshCcw className="mr-2 h-4 w-4" />
-                  Retry
-                </Button>
-                <Button
                   type="submit"
-                  disabled={
-                    isStructuredReplyMode ||
-                    state.pendingRequest ||
-                    isSessionLoading ||
-                    !state.chatSession ||
-                    state.uiFlags.sessionExpired ||
-                    isRateLimited
-                  }
+                  className="rounded-full"
+                  disabled={composerDisabled}
                 >
                   {state.pendingRequest ? (
                     <>
