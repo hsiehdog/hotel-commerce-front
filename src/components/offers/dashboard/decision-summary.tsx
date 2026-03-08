@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FallbackGuidance, RecommendedRoom, RecommendedUpsell } from "@/lib/offers-demo";
 import { DecisionOfferCard } from "./offer-card";
-import { formatMoney } from "./utils";
+import { formatMoney, scoreCell } from "./utils";
 
 interface DecisionSummaryProps {
   recommendedRoom: RecommendedRoom | null;
@@ -45,7 +45,7 @@ export function DecisionSummary({ recommendedRoom, recommendedOffers, fallback }
               <div key={`${offer.bundleType}-${offer.label}`} className="rounded-md border p-3 text-sm">
                 <div className="flex items-center justify-between gap-3">
                   <p className="font-medium">{offer.label}</p>
-                  <Badge variant="secondary">{offer.score === null ? "-" : offer.score.toFixed(2)}</Badge>
+                  <Badge variant="secondary">{scoreCell(offer.score)}</Badge>
                 </div>
                 {offer.estimatedPriceDelta !== null ? (
                   <p className="text-xs text-muted-foreground">Est. delta: {formatMoney(offer.estimatedPriceDelta)}</p>

@@ -9,6 +9,34 @@ import {
 const WEIGHTS_SUMMARY_TEXT =
   "Offer scores are calculated as a weighted blend of value, conversion, experience, and margin proxy, minus a separate risk penalty.";
 
+const SCORING_WEIGHT_ROWS = [
+  {
+    key: "value",
+    label: "Value",
+    description: "rewards lower-priced options",
+  },
+  {
+    key: "conversion",
+    label: "Conversion",
+    description: "rewards easier booking terms, e.g. refundable, pay at property",
+  },
+  {
+    key: "experience",
+    label: "Experience",
+    description: "rewards higher-tier room quality",
+  },
+  {
+    key: "margin",
+    label: "Margin",
+    description: "rewards higher-priced options from a revenue perspective",
+  },
+  {
+    key: "risk",
+    label: "Risk",
+    description: "captures downside friction e.g. non-refundable, pay now, low inventory",
+  },
+] as const;
+
 function formatPersonaLabel(label: string) {
   return label
     .replace(/_/g, " ")
@@ -27,8 +55,7 @@ export function GuestProfile({
   scoringWeights,
   personaConfidence,
 }: GuestProfileProps) {
-  const weights = scoringWeights;
-  const hasWeights = Object.keys(weights).length > 0;
+  const hasWeights = Object.keys(scoringWeights).length > 0;
   const personas = Object.entries(personaConfidence)
     .map(([key, value]) => [key, Number(value)] as const)
     .filter((entry) => Number.isFinite(entry[1]))
@@ -64,31 +91,15 @@ export function GuestProfile({
               Weights
             </p>
             <div className="space-y-1 text-sm">
-              <p>
-                <span className="font-semibold">Value:</span>{" "}
-                <span className="font-mono">{(firstNumber(weights.value) ?? 0).toFixed(2)}</span>{" "}
-                <span className="text-muted-foreground">(rewards lower-priced options)</span>
-              </p>
-              <p>
-                <span className="font-semibold">Conversion:</span>{" "}
-                <span className="font-mono">{(firstNumber(weights.conversion) ?? 0).toFixed(2)}</span>{" "}
-                <span className="text-muted-foreground">(rewards easier booking terms, e.g. refundable, pay at property)</span>
-              </p>
-              <p>
-                <span className="font-semibold">Experience:</span>{" "}
-                <span className="font-mono">{(firstNumber(weights.experience) ?? 0).toFixed(2)}</span>{" "}
-                <span className="text-muted-foreground">(rewards higher-tier room quality)</span>
-              </p>
-              <p>
-                <span className="font-semibold">Margin:</span>{" "}
-                <span className="font-mono">{(firstNumber(weights.margin) ?? 0).toFixed(2)}</span>{" "}
-                <span className="text-muted-foreground">(rewards higher-priced options from a revenue perspective)</span>
-              </p>
-              <p>
-                <span className="font-semibold">Risk:</span>{" "}
-                <span className="font-mono">{(firstNumber(weights.risk) ?? 0).toFixed(2)}</span>{" "}
-                <span className="text-muted-foreground">(captures downside friction e.g. non-refundable, pay now, low inventory)</span>
-              </p>
+              {SCORING_WEIGHT_ROWS.map((row) => (
+                <p key={row.key}>
+                  <span className="font-semibold">{row.label}:</span>{" "}
+                  <span className="font-mono">
+                    {(firstNumber(scoringWeights[row.key]) ?? 0).toFixed(2)}
+                  </span>{" "}
+                  <span className="text-muted-foreground">({row.description})</span>
+                </p>
+              ))}
             </div>
             <p className="mt-2 text-xs text-muted-foreground">
               {WEIGHTS_SUMMARY_TEXT}

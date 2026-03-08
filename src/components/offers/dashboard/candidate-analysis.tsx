@@ -11,6 +11,7 @@ type CandidateAnalysisProps = {
   expandedCandidate: string | null;
   setExpandedCandidate: (value: string | null | ((current: string | null) => string | null)) => void;
   parsedResponse: ParsedOffersResponse;
+  showFullScore?: boolean;
 };
 
 const DISPLAY_TOKEN_MAP: Record<string, string> = {
@@ -70,6 +71,7 @@ export function CandidateAnalysis({
   expandedCandidate,
   setExpandedCandidate,
   parsedResponse,
+  showFullScore = false,
 }: CandidateAnalysisProps) {
   const rankedRooms = parsedResponse.rankedRooms;
   const recommendedRoom = parsedResponse.recommendedRoom;
@@ -139,7 +141,9 @@ export function CandidateAnalysis({
                             </div>
                           </div>
                         </td>
-                        <td className="px-3 py-2 font-mono font-bold text-foreground">{scoreCell(room.score)}</td>
+                        <td className="px-3 py-2 font-mono font-bold text-foreground">
+                          {scoreCell(room.score, showFullScore)}
+                        </td>
                         <td className="px-3 py-2 text-xs">
                           {reasons.length > 0 ? (
                             <div className="flex flex-wrap gap-1">

@@ -60,9 +60,9 @@ export function formatMoney(value: number | null): string {
   return `$${value.toFixed(2)}`;
 }
 
-export function scoreCell(value: number | null): string {
+export function scoreCell(value: number | null, showFullValue = false): string {
   if (value === null || Number.isNaN(value)) {
     return "-";
   }
-  return value.toFixed(2);
+  return showFullValue ? String(value) : value.toFixed(2);
 }

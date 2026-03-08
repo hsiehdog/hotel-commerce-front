@@ -18,10 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { asRecord } from "./dashboard/utils";
 import { buildEffectiveConfigRows } from "./dashboard/dashboard-logic";
-import { DecisionSummary } from "./dashboard/decision-summary";
-import { GuestProfile } from "./dashboard/guest-profile";
-import { CandidateAnalysis } from "./dashboard/candidate-analysis";
-import { DebugPanel } from "./dashboard/debug-panel";
+import { DecisionPanels } from "./dashboard/decision-panels";
 import {
   buildRoomFallbackFromRow,
   formatBasicOfferDetails,
@@ -384,40 +381,17 @@ export function OffersLogsDashboard() {
                 ) : detailQuery.isError || !detailQuery.data ? (
                   <p className="text-sm text-destructive">{(detailQuery.error as Error)?.message ?? "Failed to load detail."}</p>
                 ) : parsedDetailForView ? (
-                  <div className="min-w-0 space-y-6 pb-20">
-                    <div id="selection" className="scroll-mt-24">
-                      <DecisionSummary
-                        recommendedRoom={parsedDetailForView.recommendedRoom}
-                        recommendedOffers={parsedDetailForView.recommendedOffers}
-                        fallback={parsedDetailForView.fallback}
-                      />
-                    </div>
-
-                    <div id="profile" className="scroll-mt-24">
-                      <GuestProfile
-                        scoringWeights={scoringWeights}
-                        personaConfidence={parsedDetailForView.personaConfidence}
-                      />
-                    </div>
-
-                    <div id="funnel" className="scroll-mt-24">
-                      <CandidateAnalysis
-                        expandedCandidate={expandedCandidate}
-                        setExpandedCandidate={setExpandedCandidate}
-                        parsedResponse={parsedDetailForView}
-                      />
-                    </div>
-
-                    <div id="debug" className="scroll-mt-24">
-                      <DebugPanel
-                        parsedResponse={parsedDetailForView}
-                        requestPayload={requestPayload}
-                        rawResponse={parsedDetailForView.raw}
-                        effectiveConfigRows={effectiveConfigRows}
-                        showRawJson={false}
-                      />
-                    </div>
-                  </div>
+                  <DecisionPanels
+                    parsedResponse={parsedDetailForView}
+                    scoringWeights={scoringWeights}
+                    requestPayload={requestPayload}
+                    rawResponse={parsedDetailForView.raw}
+                    effectiveConfigRows={effectiveConfigRows}
+                    expandedCandidate={expandedCandidate}
+                    setExpandedCandidate={setExpandedCandidate}
+                    showFullScore
+                    showRawJson={false}
+                  />
                 ) : null}
               </ScrollArea>
             </div>

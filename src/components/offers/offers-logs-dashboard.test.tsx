@@ -263,7 +263,7 @@ describe("OffersLogsDashboard", () => {
               room_type_name: "Family Suite",
               rate_plan_id: "rp_flex",
               price: 451.36,
-              score: 0.88,
+              score: 0.8731,
               component_scores: { fit: 0.95 },
               reasons: ["Strong fit"],
             },
@@ -293,6 +293,7 @@ describe("OffersLogsDashboard", () => {
     expect(screen.getByText("Family Suite | Flexible")).toBeTruthy();
     expect(screen.getByText("User Profile")).toBeTruthy();
     expect(screen.getByText("Room Ranking")).toBeTruthy();
+    expect(screen.getByText("0.8731")).toBeTruthy();
     expect(screen.getByText("Audit Trail")).toBeTruthy();
   });
 

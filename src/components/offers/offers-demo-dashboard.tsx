@@ -14,11 +14,8 @@ import {
   validateOffersDraft,
 } from "@/lib/offers-demo";
 import { buildEffectiveConfigRows } from "./dashboard/dashboard-logic";
+import { DecisionPanels } from "./dashboard/decision-panels";
 import { RequestForm } from "./dashboard/request-form";
-import { DecisionSummary } from "./dashboard/decision-summary";
-import { GuestProfile } from "./dashboard/guest-profile";
-import { CandidateAnalysis } from "./dashboard/candidate-analysis";
-import { DebugPanel } from "./dashboard/debug-panel";
 import { Card, CardContent } from "@/components/ui/card";
 import { asRecord } from "./dashboard/utils";
 
@@ -123,50 +120,27 @@ export function OffersDemoDashboard() {
         />
       </div>
 
-      <div className="min-w-0 space-y-6 pb-20">
-        {!parsedResponse ? (
+      {!parsedResponse ? (
+        <div className="min-w-0 space-y-6 pb-20">
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center justify-center py-12 text-center text-sm text-muted-foreground">
               <p className="mb-2 text-lg font-semibold text-foreground">Ready to run</p>
               <p>Configure the guest request on the left and click &quot;Run Decision&quot;.</p>
             </CardContent>
           </Card>
-        ) : (
-          <>
-            <div id="selection" className="scroll-mt-24">
-              <DecisionSummary
-                recommendedRoom={parsedResponse.recommendedRoom}
-                recommendedOffers={parsedResponse.recommendedOffers}
-                fallback={parsedResponse.fallback}
-              />
-            </div>
-
-            <div id="profile" className="scroll-mt-24">
-              <GuestProfile
-                scoringWeights={scoringWeights}
-                personaConfidence={parsedResponse.personaConfidence}
-              />
-            </div>
-
-            <div id="funnel" className="scroll-mt-24">
-              <CandidateAnalysis
-                expandedCandidate={expandedCandidate}
-                setExpandedCandidate={setExpandedCandidate}
-                parsedResponse={parsedResponse}
-              />
-            </div>
-
-            <div id="debug" className="scroll-mt-24">
-              <DebugPanel
-                parsedResponse={parsedResponse}
-                requestPayload={requestPayload}
-                rawResponse={rawResponse}
-                effectiveConfigRows={effectiveConfigRows}
-              />
-            </div>
-          </>
-        )}
-      </div>
+        </div>
+      ) : (
+        <DecisionPanels
+          parsedResponse={parsedResponse}
+          scoringWeights={scoringWeights}
+          requestPayload={requestPayload}
+          rawResponse={rawResponse}
+          effectiveConfigRows={effectiveConfigRows}
+          expandedCandidate={expandedCandidate}
+          setExpandedCandidate={setExpandedCandidate}
+          showFullScore
+        />
+      )}
     </div>
   );
 }

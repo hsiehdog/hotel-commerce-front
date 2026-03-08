@@ -78,6 +78,28 @@ describe("CandidateAnalysis", () => {
     expect(screen.getByText("Accessible King Room")).toBeTruthy();
     expect(screen.getByText("Sel")).toBeTruthy();
     expect(screen.getByText("Strong fit")).toBeTruthy();
+    expect(screen.getByText("0.91")).toBeTruthy();
+  });
+
+  it("shows the full score when requested", () => {
+    const parsed = buildParsedResponse();
+    parsed.rankedRooms = [
+      {
+        ...parsed.rankedRooms[0],
+        score: 0.8731,
+      },
+    ];
+
+    render(
+      <CandidateAnalysis
+        expandedCandidate={null}
+        setExpandedCandidate={vi.fn()}
+        parsedResponse={parsed}
+        showFullScore
+      />,
+    );
+
+    expect(screen.getByText("0.8731")).toBeTruthy();
   });
 
   it("shows empty state when ranked rooms are empty", () => {
