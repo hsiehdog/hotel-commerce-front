@@ -88,12 +88,13 @@ export function OffersDemoDashboard() {
     }
 
     setDraft((prev) => ({
-      ...prev,
+      ...getDefaultOffersDraft(),
+      property_id: prev.property_id,
       ...preset.values,
-      child_ages: preset.values.child_ages ? [...preset.values.child_ages] : prev.child_ages,
+      child_ages: preset.values.child_ages ? [...preset.values.child_ages] : [],
       roomOccupancies: preset.values.roomOccupancies
         ? preset.values.roomOccupancies.map((item) => ({ ...item }))
-        : prev.roomOccupancies,
+        : [{ adults: 1, children: 0 }],
       extraJson: preset.extraJson ? JSON.stringify(preset.extraJson, null, 2) : "",
     }));
     setFormErrors([]);

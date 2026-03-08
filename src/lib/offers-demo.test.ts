@@ -5,6 +5,7 @@ import {
   getDefaultOffersDraft,
   parseAdvancedJson,
   parseOffersResponse,
+  scenarioPresets,
   validateOffersDraft,
 } from "@/lib/offers-demo";
 
@@ -45,6 +46,24 @@ describe("offers demo request builder", () => {
     expect(payload.children).toBeUndefined();
   });
 
+  it("normalizes room occupancies from the top-level guest counts", () => {
+    const draft = {
+      ...getDefaultOffersDraft(),
+      property_id: "inn_at_mount_shasta",
+      check_in: "2026-06-19",
+      check_out: "2026-06-21",
+      rooms: "1",
+      adults: "4",
+      children: "0",
+      roomOccupancies: [{ adults: 2, children: 0 }],
+    };
+
+    const payload = buildOffersGenerateRequest(draft, {});
+
+    expect(payload.adults).toBe(4);
+    expect(payload.roomOccupancies).toEqual([{ adults: 4, children: 0 }]);
+  });
+
   it("validates child age mismatch and invalid JSON", () => {
     const draft = {
       ...getDefaultOffersDraft(),
@@ -62,6 +81,22 @@ describe("offers demo request builder", () => {
 
     expect(errors).toContain("child_ages length must match children.");
     expect(errors).toContain("Advanced JSON is not valid JSON.");
+  });
+
+  it("rejects drafts where adults are fewer than rooms", () => {
+    const draft = {
+      ...getDefaultOffersDraft(),
+      property_id: "hotel-test-1",
+      check_in: "2026-01-02",
+      check_out: "2026-01-03",
+      rooms: "2",
+      adults: "1",
+      children: "0",
+    };
+
+    const errors = validateOffersDraft(draft, null);
+
+    expect(errors).toContain("adults must be at least rooms so each room has one adult.");
   });
 
   it("parses advanced JSON object and rejects non-object payloads", () => {
@@ -162,5 +197,20 @@ describe("offers response parser", () => {
     expect(parsed.recommendedOffers).toEqual([]);
     expect(parsed.rankedRooms).toEqual([]);
     expect(parsed.fallback?.type).toBe("suggest_alternate_dates");
+  });
+});
+
+describe("scenario presets", () => {
+  it("uses short scenario labels", () => {
+    expect(scenarioPresets.map((preset) => preset.label)).toEqual([
+      "Family stay",
+      "Couple getaway",
+      "Solo weekday traveler",
+      "Group booking",
+      "Late checkout choice",
+      "Extended stay",
+      "Last-minute",
+      "General traveler fallback",
+    ]);
   });
 });

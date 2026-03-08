@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -124,5 +124,76 @@ describe("OffersDemoDashboard", () => {
     });
 
     expect(screen.getByText("No eligible room remained. Try nearby dates.")).toBeTruthy();
+  });
+
+  it("resets constraints when applying a scenario preset", async () => {
+    const user = userEvent.setup();
+
+    render(<OffersDemoDashboard />);
+
+    const petFriendly = screen.getByLabelText("Pet friendly") as HTMLInputElement;
+    expect(petFriendly.checked).toBe(false);
+
+    await user.click(petFriendly);
+    expect(petFriendly.checked).toBe(true);
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Family stay",
+      }),
+    );
+
+    expect((screen.getByLabelText("Pet friendly") as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByLabelText("Accessible") as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByLabelText("Two beds") as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByLabelText("Parking") as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByLabelText("Breakfast package") as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByLabelText("Early check-in") as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByLabelText("Late check-out") as HTMLInputElement).checked).toBe(false);
+  });
+
+  it("syncs room occupancies when adults change before submit", async () => {
+    const user = userEvent.setup();
+
+    mockedRequestOfferGeneration.mockResolvedValue({
+      data: {
+        recommended_room: null,
+        recommended_offers: [],
+        ranked_rooms: [],
+        fallback: null,
+      },
+    });
+
+    render(<OffersDemoDashboard />);
+
+    await user.click(screen.getByRole("button", { name: "Couple getaway" }));
+
+    fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "4" } });
+    await user.click(screen.getByRole("button", { name: "Run Decision" }));
+
+    await waitFor(() => {
+      expect(mockedRequestOfferGeneration).toHaveBeenCalledWith(
+        expect.objectContaining({
+          adults: 4,
+          roomOccupancies: [{ adults: 4, children: 0 }],
+        }),
+      );
+    });
+  });
+
+  it("keeps the selected property when applying a scenario preset", async () => {
+    const user = userEvent.setup();
+
+    render(<OffersDemoDashboard />);
+
+    const property = screen.getByLabelText("Property") as HTMLSelectElement;
+    expect(property.value).toBe("demo_property");
+
+    await user.selectOptions(property, "inn_at_mount_shasta");
+    expect(property.value).toBe("inn_at_mount_shasta");
+
+    await user.click(screen.getByRole("button", { name: "Extended stay" }));
+
+    expect((screen.getByLabelText("Property") as HTMLSelectElement).value).toBe("inn_at_mount_shasta");
   });
 });

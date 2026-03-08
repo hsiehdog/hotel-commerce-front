@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  buildRoomOccupancies,
   OffersDraft,
   scenarioPresets,
 } from "@/lib/offers-demo";
@@ -56,6 +57,11 @@ export function RequestForm({
         ...prev,
         children: String(nextChildren),
         child_ages: nextAges,
+        roomOccupancies: buildRoomOccupancies(
+          Number(prev.rooms),
+          Number(prev.adults),
+          nextChildren,
+        ),
       };
     });
   }
@@ -73,12 +79,33 @@ export function RequestForm({
         nextOccupancies.push({ adults: 1, children: 0 });
       }
 
+      const normalizedOccupancies = buildRoomOccupancies(
+        nextRooms,
+        Number(prev.adults),
+        Number(prev.children),
+      );
+
       return {
         ...prev,
         rooms: String(nextRooms),
-        roomOccupancies: nextOccupancies,
+        roomOccupancies: normalizedOccupancies.length ? normalizedOccupancies : nextOccupancies,
       };
     });
+  }
+
+  function handleAdultsChange(value: string) {
+    const parsed = Number(value);
+    const nextAdults = Number.isFinite(parsed) ? Math.max(1, Math.floor(parsed)) : 1;
+
+    setDraft((prev) => ({
+      ...prev,
+      adults: String(nextAdults),
+      roomOccupancies: buildRoomOccupancies(
+        Number(prev.rooms),
+        nextAdults,
+        Number(prev.children),
+      ),
+    }));
   }
 
   return (
@@ -197,9 +224,7 @@ export function RequestForm({
                     min={1}
                     className="h-9"
                     value={draft.adults}
-                    onChange={(event) =>
-                      setDraft((prev) => ({ ...prev, adults: event.target.value }))
-                    }
+                    onChange={(event) => handleAdultsChange(event.target.value)}
                   />
                 </div>
                  <div className="space-y-1">

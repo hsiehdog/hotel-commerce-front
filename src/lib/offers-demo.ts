@@ -62,28 +62,13 @@ export type ScenarioPreset = {
 
 export const scenarioPresets: ScenarioPreset[] = [
   {
-    id: "solo-near-term-web",
-    label: "Solo near-term web",
-    description: "Baseline SAFE-first profile",
+    id: "inn-family-stay",
+    label: "Family stay",
+    description: "Inn at Mount Shasta family stay. Shows family_traveler, Bunk Suite, and property-limited upsells.",
     values: {
       channel: "web",
-      check_in: "2026-03-20",
-      check_out: "2026-03-22",
-      rooms: "1",
-      adults: "1",
-      children: "0",
-      child_ages: [],
-      roomOccupancies: [{ adults: 1, children: 0 }],
-    },
-  },
-  {
-    id: "family-trip",
-    label: "Family trip",
-    description: "Family profile with likely family-fit enhancement",
-    values: {
-      channel: "web",
-      check_in: "2026-06-10",
-      check_out: "2026-06-13",
+      check_in: "2026-06-16",
+      check_out: "2026-06-18",
       rooms: "1",
       adults: "2",
       children: "2",
@@ -92,85 +77,111 @@ export const scenarioPresets: ScenarioPreset[] = [
     },
   },
   {
-    id: "accessible-required",
-    label: "Accessible required",
-    description: "Strict room filtering for accessibility",
+    id: "inn-couple-getaway",
+    label: "Couple getaway",
+    description: "Inn at Mount Shasta couple getaway. Shows weekend_couple, leisure fit, and late checkout upsell.",
     values: {
       channel: "web",
-      check_in: "2026-05-08",
-      check_out: "2026-05-10",
+      check_in: "2026-06-19",
+      check_out: "2026-06-21",
       rooms: "1",
       adults: "2",
       children: "0",
       child_ages: [],
       roomOccupancies: [{ adults: 2, children: 0 }],
-      accessible_room: true,
     },
   },
   {
-    id: "two-beds-required",
-    label: "Two beds required",
-    description: "Filters out king-only options",
+    id: "inn-solo-weekday",
+    label: "Solo weekday traveler",
+    description: "Inn at Mount Shasta solo weekday traveler. Shows solo_business_traveler and a simple fit-first room recommendation.",
     values: {
       channel: "web",
-      check_in: "2026-05-08",
-      check_out: "2026-05-10",
+      check_in: "2026-05-12",
+      check_out: "2026-05-14",
       rooms: "1",
-      adults: "2",
+      adults: "1",
       children: "0",
       child_ages: [],
-      roomOccupancies: [{ adults: 2, children: 0 }],
-      needs_two_beds: true,
+      roomOccupancies: [{ adults: 1, children: 0 }],
     },
   },
   {
-    id: "pet-friendly",
-    label: "Pet-friendly",
-    description: "Pet fee enhancement and pricing impact",
-    values: {
-      channel: "web",
-      check_in: "2026-04-18",
-      check_out: "2026-04-20",
-      rooms: "1",
-      adults: "2",
-      children: "0",
-      child_ages: [],
-      roomOccupancies: [{ adults: 2, children: 0 }],
-      pet_friendly: true,
-    },
-  },
-  {
-    id: "parking-needed",
-    label: "Parking needed",
-    description: "Parking enhancement and pricing impact",
-    values: {
-      channel: "web",
-      check_in: "2026-04-18",
-      check_out: "2026-04-20",
-      rooms: "1",
-      adults: "2",
-      children: "0",
-      child_ages: [],
-      roomOccupancies: [{ adults: 2, children: 0 }],
-      parking_needed: true,
-    },
-  },
-  {
-    id: "multi-room-distribution",
-    label: "Multi-room distribution",
-    description: "Two-room occupancy split with family profile",
+    id: "inn-group-booking",
+    label: "Group booking",
+    description: "Inn at Mount Shasta group booking. Shows group and multi-room handling.",
     values: {
       channel: "agent",
-      check_in: "2026-07-02",
-      check_out: "2026-07-05",
+      check_in: "2026-06-12",
+      check_out: "2026-06-15",
       rooms: "2",
       adults: "4",
-      children: "2",
-      child_ages: [5, 9],
+      children: "0",
+      child_ages: [],
       roomOccupancies: [
-        { adults: 2, children: 1 },
-        { adults: 2, children: 1 },
+        { adults: 2, children: 0 },
+        { adults: 2, children: 0 },
       ],
+    },
+  },
+  {
+    id: "inn-late-checkout-choice",
+    label: "Late checkout choice",
+    description: "Late checkout choice. Reuse the couple scenario, then ask for late checkout and choose Noon for $25 or 1 PM for $50.",
+    values: {
+      channel: "web",
+      check_in: "2026-06-19",
+      check_out: "2026-06-21",
+      rooms: "1",
+      adults: "2",
+      children: "0",
+      child_ages: [],
+      roomOccupancies: [{ adults: 2, children: 0 }],
+    },
+  },
+  {
+    id: "demo-extended-stay",
+    label: "Extended stay",
+    description: "Extended-stay scenario for demo_property. Best long-stay showcase with long-stay pricing and a stronger parking upsell from per-night pricing.",
+    values: {
+      channel: "web",
+      check_in: "2026-05-11",
+      check_out: "2026-05-18",
+      rooms: "1",
+      adults: "1",
+      children: "0",
+      child_ages: [],
+      roomOccupancies: [{ adults: 1, children: 0 }],
+    },
+  },
+  {
+    id: "demo-last-minute",
+    label: "Last-minute",
+    description: "Last-minute scenario for demo_property. Shows short lead-time booking behavior and a short-stay upsell pattern.",
+    values: {
+      channel: "web",
+      check_in: "2026-03-09",
+      check_out: "2026-03-10",
+      rooms: "1",
+      adults: "1",
+      children: "0",
+      child_ages: [],
+      roomOccupancies: [{ adults: 1, children: 0 }],
+    },
+  },
+  {
+    id: "demo-general-traveler",
+    label: "General traveler fallback",
+    description: "General traveler fallback for demo_property. Use this as a non-specialized traveler example, not a guarantee of a clean top-label win.",
+    values: {
+      channel: "web",
+      check_in: "2026-08-18",
+      check_out: "2026-08-20",
+      rooms: "1",
+      adults: "3",
+      children: "0",
+      child_ages: [],
+      roomOccupancies: [{ adults: 3, children: 0 }],
     },
   },
 ];
@@ -343,6 +354,9 @@ export function validateOffersDraft(
   if (children === null) {
     errors.push("children must be 0 or greater.");
   }
+  if (rooms && adults && adults < rooms) {
+    errors.push("adults must be at least rooms so each room has one adult.");
+  }
 
   const checkInDate = new Date(draft.check_in);
   const checkOutDate = new Date(draft.check_out);
@@ -388,17 +402,21 @@ export function buildOffersGenerateRequest(
   draft: OffersDraft,
   advancedFields: Record<string, unknown>,
 ): OffersGenerateRequest {
+  const rooms = Number(draft.rooms);
+  const adults = Number(draft.adults);
+  const children = Number(draft.children);
+
   const payload: OffersGenerateRequest = {
     property_id: draft.property_id.trim(),
     channel: draft.channel,
     check_in: draft.check_in,
     check_out: draft.check_out,
     currency: "USD",
-    rooms: Number(draft.rooms),
-    adults: Number(draft.adults),
-    children: Number(draft.children),
+    rooms,
+    adults,
+    children,
     child_ages: draft.child_ages,
-    roomOccupancies: draft.roomOccupancies,
+    roomOccupancies: buildRoomOccupancies(rooms, adults, children),
     pet_friendly: draft.pet_friendly,
     accessible_room: draft.accessible_room,
     needs_two_beds: draft.needs_two_beds,
@@ -420,6 +438,28 @@ export function buildOffersGenerateRequest(
   }
 
   return payload;
+}
+
+export function buildRoomOccupancies(
+  rooms: number,
+  adults: number,
+  children: number,
+): RoomOccupancy[] {
+  if (
+    !Number.isFinite(rooms) ||
+    rooms <= 0 ||
+    !Number.isFinite(adults) ||
+    adults <= 0 ||
+    !Number.isFinite(children) ||
+    children < 0
+  ) {
+    return [];
+  }
+
+  return Array.from({ length: rooms }, (_, index) => ({
+    adults: distributeGuests(adults, rooms, index),
+    children: distributeGuests(children, rooms, index),
+  }));
 }
 
 export function parseOffersResponse(payload: unknown): ParsedOffersResponse {
@@ -733,6 +773,16 @@ function toNonNegativeInt(value: string): number | null {
     return null;
   }
   return Math.floor(parsed);
+}
+
+function distributeGuests(total: number, rooms: number, index: number): number {
+  if (total <= 0 || rooms <= 0) {
+    return 0;
+  }
+
+  const base = Math.floor(total / rooms);
+  const remainder = total % rooms;
+  return base + (index < remainder ? 1 : 0);
 }
 
 function unwrapOffersResponseRecord(payload: unknown): Record<string, unknown> {
