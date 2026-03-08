@@ -34,6 +34,7 @@ export function DecisionPanels({
       <div id="selection" className="scroll-mt-24">
         <DecisionSummary
           recommendedRoom={parsedResponse.recommendedRoom}
+          upgradeLadder={parsedResponse.upgradeLadder}
           recommendedOffers={parsedResponse.recommendedOffers}
           fallback={parsedResponse.fallback}
         />

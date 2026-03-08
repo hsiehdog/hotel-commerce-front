@@ -344,6 +344,7 @@ function isOffersPayloadRecord(value: unknown): value is Record<string, unknown>
   return [
     "recommended_room",
     "recommended_offers",
+    "upgrade_ladder",
     "ranked_rooms",
     "persona_confidence",
     "price_basis_used",

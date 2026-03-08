@@ -230,6 +230,21 @@ export type RecommendedUpsell = {
   estimatedPriceDelta: number | null;
 };
 
+export type UpgradeLadderEntry = {
+  roomTypeId: string;
+  roomType: string;
+  ratePlanId: string;
+  ratePlan: string;
+  totalPrice: number | null;
+  nightlyPrice: number | null;
+  priceDeltaTotal: number | null;
+  priceDeltaPerNight: number | null;
+  upgradeLevel: "next_step" | "premium_step" | "top_step" | "";
+  reasons: string[];
+  benefitSummary: string[];
+  ladderScore: number | null;
+};
+
 export type RankedRoom = {
   roomTypeId: string;
   roomTypeName: string;
@@ -264,6 +279,7 @@ export type ParsedOffersResponse = {
   personaConfidence: Record<string, number>;
   recommendedRoom: RecommendedRoom | null;
   recommendedOffers: RecommendedUpsell[];
+  upgradeLadder: UpgradeLadderEntry[];
   rankedRooms: RankedRoom[];
   fallback: FallbackGuidance | null;
   propertyContext: PropertyContext;
@@ -468,6 +484,7 @@ export function parseOffersResponse(payload: unknown): ParsedOffersResponse {
 
   const recommendedRoom = parseRecommendedRoom(data.recommended_room);
   const recommendedOffers = parseRecommendedOffers(data.recommended_offers);
+  const upgradeLadder = parseUpgradeLadder(data.upgrade_ladder);
   const rankedRooms = parseRankedRooms(data.ranked_rooms);
   const fallback = parseFallback(data.fallback);
   const propertyContext = parsePropertyContext(data, debug);
@@ -481,6 +498,7 @@ export function parseOffersResponse(payload: unknown): ParsedOffersResponse {
     personaConfidence: parsePersonaConfidence(data.persona_confidence),
     recommendedRoom,
     recommendedOffers,
+    upgradeLadder,
     rankedRooms,
     fallback,
     propertyContext,
@@ -568,6 +586,30 @@ function parseRecommendedOffers(value: unknown): RecommendedUpsell[] {
   });
 }
 
+function parseUpgradeLadder(value: unknown): UpgradeLadderEntry[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.map((entry) => {
+    const row = isRecord(entry) ? entry : {};
+    return {
+      roomTypeId: toStringOrFallback(row.room_type_id, ""),
+      roomType: toStringOrFallback(row.room_type, "-"),
+      ratePlanId: toStringOrFallback(row.rate_plan_id, ""),
+      ratePlan: toStringOrFallback(row.rate_plan, "-"),
+      totalPrice: firstNumber(row.total_price),
+      nightlyPrice: firstNumber(row.nightly_price),
+      priceDeltaTotal: firstNumber(row.price_delta_total),
+      priceDeltaPerNight: firstNumber(row.price_delta_per_night),
+      upgradeLevel: parseUpgradeLevel(row.upgrade_level),
+      reasons: firstStringArray(row.reasons),
+      benefitSummary: firstStringArray(row.benefit_summary),
+      ladderScore: firstNumber(row.ladder_score),
+    };
+  });
+}
+
 function parseRankedRooms(value: unknown): RankedRoom[] {
   if (!Array.isArray(value)) {
     return [];
@@ -602,6 +644,13 @@ function parseFallback(value: unknown): FallbackGuidance | null {
     reason: toStringOrFallback(value.reason, "No recommendation available."),
     suggestions: Array.isArray(value.suggestions) ? value.suggestions : [],
   };
+}
+
+function parseUpgradeLevel(value: unknown): UpgradeLadderEntry["upgradeLevel"] {
+  if (value === "next_step" || value === "premium_step" || value === "top_step") {
+    return value;
+  }
+  return "";
 }
 
 function parseRecommendedRoomPricingBreakdown(value: unknown): RecommendedRoom["pricingBreakdown"] {

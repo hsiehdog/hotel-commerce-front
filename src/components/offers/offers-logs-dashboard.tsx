@@ -186,6 +186,7 @@ export function OffersLogsDashboard() {
         personaConfidence: {},
         recommendedRoom: decisionSummaryRoom,
         recommendedOffers: [],
+        upgradeLadder: [],
         rankedRooms: [],
         fallback: null,
         propertyContext: {

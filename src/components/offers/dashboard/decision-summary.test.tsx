@@ -2,7 +2,12 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { DecisionSummary } from "./decision-summary";
-import type { FallbackGuidance, RecommendedRoom, RecommendedUpsell } from "@/lib/offers-demo";
+import type {
+  FallbackGuidance,
+  RecommendedRoom,
+  RecommendedUpsell,
+  UpgradeLadderEntry,
+} from "@/lib/offers-demo";
 
 const room: RecommendedRoom = {
   roomType: "Family Suite",
@@ -32,6 +37,23 @@ const upsells: RecommendedUpsell[] = [
   },
 ];
 
+const upgradeLadder: UpgradeLadderEntry[] = [
+  {
+    roomTypeId: "rt_bunk_suite",
+    roomType: "Bunk Suite",
+    ratePlanId: "rp_suite_standard",
+    ratePlan: "Standard Rate - Suites",
+    totalPrice: 598,
+    nightlyPrice: 299,
+    priceDeltaTotal: 140,
+    priceDeltaPerNight: 70,
+    upgradeLevel: "next_step",
+    reasons: ["Only $70 more per night than your current option"],
+    benefitSummary: ["Suite-level upgrade with more living space"],
+    ladderScore: 0.74,
+  },
+];
+
 const fallback: FallbackGuidance = {
   type: "suggest_alternate_dates",
   reason: "No eligible room remained.",
@@ -39,17 +61,34 @@ const fallback: FallbackGuidance = {
 };
 
 describe("DecisionSummary", () => {
-  it("renders recommendation and upsells", () => {
-    render(<DecisionSummary recommendedRoom={room} recommendedOffers={upsells} fallback={null} />);
+  it("renders recommendation, upgrade ladder, and upsells", () => {
+    render(
+      <DecisionSummary
+        recommendedRoom={room}
+        upgradeLadder={upgradeLadder}
+        recommendedOffers={upsells}
+        fallback={null}
+      />,
+    );
 
     expect(screen.getAllByText("Recommended Room").length).toBeGreaterThan(0);
+    expect(screen.getByText("Upgrade Ladder")).toBeTruthy();
+    expect(screen.getByText("Bunk Suite | Standard Rate - Suites")).toBeTruthy();
+    expect(screen.getByText("Only $70 more per night than your current option")).toBeTruthy();
     expect(screen.getByText("Recommended Upsells")).toBeTruthy();
     expect(screen.getByText("Breakfast package")).toBeTruthy();
     expect(screen.getByText("Attach probability high")).toBeTruthy();
   });
 
   it("renders fallback branch when recommendation is null", () => {
-    render(<DecisionSummary recommendedRoom={null} recommendedOffers={[]} fallback={fallback} />);
+    render(
+      <DecisionSummary
+        recommendedRoom={null}
+        upgradeLadder={[]}
+        recommendedOffers={[]}
+        fallback={fallback}
+      />,
+    );
 
     expect(screen.getByText("No Recommendation")).toBeTruthy();
     expect(screen.getByText("No eligible room remained.")).toBeTruthy();

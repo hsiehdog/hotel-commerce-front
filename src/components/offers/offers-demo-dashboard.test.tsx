@@ -66,6 +66,22 @@ describe("OffersDemoDashboard", () => {
             estimated_price_delta: 18,
           },
         ],
+        upgrade_ladder: [
+          {
+            room_type_id: "rt_bunk_suite",
+            room_type: "Bunk Suite",
+            rate_plan_id: "rp_suite_standard",
+            rate_plan: "Standard Rate - Suites",
+            total_price: 598,
+            nightly_price: 299,
+            price_delta_total: 140,
+            price_delta_per_night: 70,
+            upgrade_level: "next_step",
+            reasons: ["Only $70 more per night than your current option"],
+            benefit_summary: ["Suite-level upgrade with more living space"],
+            ladder_score: 0.74,
+          },
+        ],
         ranked_rooms: [
           {
             room_type_id: "rt_family_suite",
@@ -92,6 +108,8 @@ describe("OffersDemoDashboard", () => {
     });
 
     expect(screen.getByText("Family Suite | Flexible Rate")).toBeTruthy();
+    expect(screen.getByText("Upgrade Ladder")).toBeTruthy();
+    expect(screen.getByText("Bunk Suite | Standard Rate - Suites")).toBeTruthy();
     expect(screen.getByText("Recommended Upsells")).toBeTruthy();
     expect(screen.getByText("Attach probability high")).toBeTruthy();
     expect(screen.getByText("Room Ranking")).toBeTruthy();
@@ -104,6 +122,7 @@ describe("OffersDemoDashboard", () => {
       data: {
         recommended_room: null,
         recommended_offers: [],
+        upgrade_ladder: [],
         ranked_rooms: [],
         fallback: {
           type: "suggest_alternate_dates",
@@ -159,6 +178,7 @@ describe("OffersDemoDashboard", () => {
       data: {
         recommended_room: null,
         recommended_offers: [],
+        upgrade_ladder: [],
         ranked_rooms: [],
         fallback: null,
       },

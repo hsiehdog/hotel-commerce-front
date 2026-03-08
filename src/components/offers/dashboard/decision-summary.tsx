@@ -2,17 +2,24 @@
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { FallbackGuidance, RecommendedRoom, RecommendedUpsell } from "@/lib/offers-demo";
+import { FallbackGuidance, RecommendedRoom, RecommendedUpsell, UpgradeLadderEntry } from "@/lib/offers-demo";
 import { DecisionOfferCard } from "./offer-card";
+import { UpgradeLadderCard } from "./upgrade-ladder-card";
 import { formatMoney, scoreCell } from "./utils";
 
 interface DecisionSummaryProps {
   recommendedRoom: RecommendedRoom | null;
+  upgradeLadder: UpgradeLadderEntry[];
   recommendedOffers: RecommendedUpsell[];
   fallback: FallbackGuidance | null;
 }
 
-export function DecisionSummary({ recommendedRoom, recommendedOffers, fallback }: DecisionSummaryProps) {
+export function DecisionSummary({
+  recommendedRoom,
+  upgradeLadder,
+  recommendedOffers,
+  fallback,
+}: DecisionSummaryProps) {
   if (!recommendedRoom) {
     return (
       <Card className="border-amber-300/70 bg-amber-50 dark:bg-amber-950/20">
@@ -34,6 +41,7 @@ export function DecisionSummary({ recommendedRoom, recommendedOffers, fallback }
   return (
     <div className="space-y-6">
       <DecisionOfferCard title="Recommended Room" offer={recommendedRoom} />
+      <UpgradeLadderCard entries={upgradeLadder} />
 
       {recommendedOffers.length > 0 ? (
         <Card>

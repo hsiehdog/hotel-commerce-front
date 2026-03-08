@@ -146,6 +146,22 @@ describe("offers response parser", () => {
             estimated_price_delta: 18,
           },
         ],
+        upgrade_ladder: [
+          {
+            room_type_id: "rt_bunk_suite",
+            room_type: "Bunk Suite",
+            rate_plan_id: "rp_suite_standard",
+            rate_plan: "Standard Rate - Suites",
+            total_price: 598,
+            nightly_price: 299,
+            price_delta_total: 140,
+            price_delta_per_night: 70,
+            upgrade_level: "next_step",
+            reasons: ["Suite-level upgrade with more living space"],
+            benefit_summary: ["Adds more sleeping flexibility"],
+            ladder_score: 0.74,
+          },
+        ],
         ranked_rooms: [
           {
             room_type_id: "rt_family_suite",
@@ -174,6 +190,20 @@ describe("offers response parser", () => {
       { label: "Early Check In Fee", amount: 35 },
     ]);
     expect(parsed.recommendedOffers[0]?.label).toBe("Breakfast package");
+    expect(parsed.upgradeLadder[0]).toEqual({
+      roomTypeId: "rt_bunk_suite",
+      roomType: "Bunk Suite",
+      ratePlanId: "rp_suite_standard",
+      ratePlan: "Standard Rate - Suites",
+      totalPrice: 598,
+      nightlyPrice: 299,
+      priceDeltaTotal: 140,
+      priceDeltaPerNight: 70,
+      upgradeLevel: "next_step",
+      reasons: ["Suite-level upgrade with more living space"],
+      benefitSummary: ["Adds more sleeping flexibility"],
+      ladderScore: 0.74,
+    });
     expect(parsed.rankedRooms[0]?.roomTypeName).toBe("Family Suite");
     expect(parsed.rankedRooms[0]?.componentScores.fit).toBe(0.95);
     expect(parsed.fallback).toBeNull();
@@ -184,6 +214,7 @@ describe("offers response parser", () => {
       data: {
         recommended_room: null,
         recommended_offers: [],
+        upgrade_ladder: [],
         ranked_rooms: [],
         fallback: {
           type: "suggest_alternate_dates",
@@ -195,6 +226,7 @@ describe("offers response parser", () => {
 
     expect(parsed.recommendedRoom).toBeNull();
     expect(parsed.recommendedOffers).toEqual([]);
+    expect(parsed.upgradeLadder).toEqual([]);
     expect(parsed.rankedRooms).toEqual([]);
     expect(parsed.fallback?.type).toBe("suggest_alternate_dates");
   });

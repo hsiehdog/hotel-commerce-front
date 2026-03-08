@@ -30,6 +30,7 @@ function buildParsedResponse(): ParsedOffersResponse {
       ratePlanId: "rp_flex",
     },
     recommendedOffers: [],
+    upgradeLadder: [],
     rankedRooms: [
       {
         roomTypeId: "rt_king",

@@ -15,6 +15,7 @@ function buildParsedResponse(): ParsedOffersResponse {
     personaConfidence: {},
     recommendedRoom: null,
     recommendedOffers: [],
+    upgradeLadder: [],
     rankedRooms: [
       {
         roomTypeId: "rt_family_suite",
