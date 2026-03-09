@@ -11,6 +11,7 @@ import {
   OffersDraft,
   scenarioPresets,
 } from "@/lib/offers-demo";
+import { getOrderedOfferProperties } from "../property-options";
 import { safeStringify } from "./utils";
 
 interface RequestFormProps {
@@ -26,6 +27,12 @@ interface RequestFormProps {
   onApplyPreset: (id: string) => void;
   requestPreview: unknown;
 }
+
+const propertyOptions = getOrderedOfferProperties([
+  { propertyId: "demo_property", name: "Demo Property" },
+  { propertyId: "cavallo_point", name: "Cavallo Point" },
+  { propertyId: "inn_at_mount_shasta", name: "Inn At Mount Shasta" },
+]);
 
 export function RequestForm({
   draft,
@@ -172,9 +179,11 @@ export function RequestForm({
                   }
                   className="border-input focus-visible:border-ring focus-visible:ring-ring/50 h-9 w-full rounded-md border bg-transparent px-3 text-sm outline-none focus-visible:ring-[3px]"
                 >
-                  <option value="demo_property">Demo Property</option>
-                  <option value="cavallo_point">Cavallo Point</option>
-                  <option value="inn_at_mount_shasta">Inn At Mount Shasta</option>
+                  {propertyOptions.map((property) => (
+                    <option key={property.propertyId} value={property.propertyId}>
+                      {property.name}
+                    </option>
+                  ))}
                 </select>
               </div>
 

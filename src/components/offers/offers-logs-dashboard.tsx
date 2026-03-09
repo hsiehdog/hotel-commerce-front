@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { asRecord } from "./dashboard/utils";
 import { buildEffectiveConfigRows } from "./dashboard/dashboard-logic";
 import { DecisionPanels } from "./dashboard/decision-panels";
+import { getOrderedOfferProperties } from "./property-options";
 import {
   buildRoomFallbackFromRow,
   formatBasicOfferDetails,
@@ -92,8 +93,30 @@ export function OffersLogsDashboard() {
 
   const propertyOptions = useMemo(() => {
     const apiProperties = propertiesQuery.data ?? [];
-    const filtered = apiProperties.filter((property) => property.propertyId !== DEFAULT_PROPERTY_ID);
-    return [{ propertyId: DEFAULT_PROPERTY_ID, name: DEFAULT_PROPERTY_ID }, ...filtered];
+    const propertiesById = new Map(apiProperties.map((property) => [property.propertyId, property]));
+
+    const mergedProperties = [
+      propertiesById.get("inn_at_mount_shasta") ?? {
+        propertyId: "inn_at_mount_shasta",
+        name: "Inn At Mount Shasta",
+      },
+      propertiesById.get("cavallo_point") ?? {
+        propertyId: "cavallo_point",
+        name: "Cavallo Point",
+      },
+      propertiesById.get(DEFAULT_PROPERTY_ID) ?? {
+        propertyId: DEFAULT_PROPERTY_ID,
+        name: "Demo Property",
+      },
+      ...apiProperties.filter(
+        (property) =>
+          property.propertyId !== "inn_at_mount_shasta"
+          && property.propertyId !== "cavallo_point"
+          && property.propertyId !== DEFAULT_PROPERTY_ID,
+      ),
+    ];
+
+    return getOrderedOfferProperties(mergedProperties);
   }, [propertiesQuery.data]);
 
   const listQuery = useInfiniteQuery({

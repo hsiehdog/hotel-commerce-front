@@ -111,6 +111,38 @@ describe("OffersLogsDashboard", () => {
     });
   });
 
+  it("orders property options with the preferred demo properties first", async () => {
+    mockedFetchOffersLogs.mockResolvedValue({
+      serverNow: new Date().toISOString(),
+      pageInfo: {
+        hasMore: false,
+        limit: 25,
+      },
+      rows: [],
+    });
+
+    mockedFetchProperties.mockResolvedValue([
+      { propertyId: "demo_property", name: "Demo Property" },
+      { propertyId: "cavallo_point", name: "Cavallo Point" },
+      { propertyId: "inn_at_mount_shasta", name: "Inn At Mount Shasta" },
+      { propertyId: "zeta_property", name: "Zeta Property" },
+    ]);
+
+    renderDashboard();
+
+    await waitFor(() => {
+      const property = screen.getByLabelText("Property") as HTMLSelectElement;
+      const values = Array.from(property.options).map((option) => option.value);
+
+      expect(values).toEqual([
+        "inn_at_mount_shasta",
+        "cavallo_point",
+        "demo_property",
+        "zeta_property",
+      ]);
+    });
+  });
+
   it("falls back to room and rate plan names in the table when primaryOfferName is missing", async () => {
     mockedFetchOffersLogs.mockResolvedValue({
       serverNow: new Date().toISOString(),
