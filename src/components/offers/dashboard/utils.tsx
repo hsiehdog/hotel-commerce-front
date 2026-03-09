@@ -57,7 +57,15 @@ export function formatMoney(value: number | null): string {
   if (value === null || Number.isNaN(value)) {
     return "n/a";
   }
-  return `$${value.toFixed(2)}`;
+
+  const hasCents = Math.abs(value % 1) > Number.EPSILON;
+
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: hasCents ? 2 : 0,
+    maximumFractionDigits: hasCents ? 2 : 0,
+  }).format(value);
 }
 
 export function scoreCell(value: number | null, showFullValue = false): string {

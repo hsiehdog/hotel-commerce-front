@@ -31,7 +31,7 @@ describe("DecisionOfferCard", () => {
     render(<DecisionOfferCard title="Recommended Room" offer={offer} />);
 
     expect(screen.getByText("Family Suite | Flexible Rate")).toBeTruthy();
-    expect(screen.getByText("$987.00")).toBeTruthy();
+    expect(screen.getByText("$987")).toBeTruthy();
     expect(screen.getByText("Subtotal")).toBeTruthy();
     expect(screen.getByText("Taxes & fees")).toBeTruthy();
     expect(screen.getByText("Pet Fee ($25/night)")).toBeTruthy();

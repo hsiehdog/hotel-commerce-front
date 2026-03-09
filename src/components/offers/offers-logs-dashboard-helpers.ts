@@ -279,13 +279,16 @@ function formatCurrency(amount?: number | null): string {
   }
 
   try {
+    const hasCents = Math.abs(amount % 1) > Number.EPSILON;
+
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: "USD",
-      maximumFractionDigits: 2,
+      minimumFractionDigits: hasCents ? 2 : 0,
+      maximumFractionDigits: hasCents ? 2 : 0,
     }).format(amount);
   } catch {
-    return `$${amount.toFixed(2)}`;
+    return Math.abs(amount % 1) > Number.EPSILON ? `$${amount.toFixed(2)}` : `$${amount.toFixed(0)}`;
   }
 }
 

@@ -25,6 +25,7 @@ describe("UpgradeLadderCard", () => {
 
     expect(screen.getByText("Only $70 more per night than your current option")).toBeTruthy();
     expect(screen.queryByText("Suite-level upgrade with more living space")).toBeNull();
+    expect(screen.queryByText("Nightly: $299")).toBeNull();
   });
 
   it("falls back to benefit summary when reasons are empty", () => {

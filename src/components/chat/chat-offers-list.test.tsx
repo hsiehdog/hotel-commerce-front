@@ -28,7 +28,7 @@ describe("ChatOffersList", () => {
 
     expect(screen.getByText("Recommended Room")).toBeTruthy();
     expect(screen.getByText("Family Suite | Flexible Rate")).toBeTruthy();
-    expect(screen.getByText("$987.00")).toBeTruthy();
+    expect(screen.getByText("$987")).toBeTruthy();
     expect(screen.getByText("Why this room")).toBeTruthy();
   });
 

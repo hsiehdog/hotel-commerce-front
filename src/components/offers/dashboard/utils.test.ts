@@ -5,6 +5,8 @@ import { asRecord, firstNumber, formatMoney, safeStringify, scoreCell, toString 
 describe("dashboard utils", () => {
   it("formats money and score values", () => {
     expect(formatMoney(12.5)).toBe("$12.50");
+    expect(formatMoney(35)).toBe("$35");
+    expect(formatMoney(1639)).toBe("$1,639");
     expect(formatMoney(null)).toBe("n/a");
     expect(scoreCell(0.8731)).toBe("0.87");
     expect(scoreCell(0.8731, true)).toBe("0.8731");

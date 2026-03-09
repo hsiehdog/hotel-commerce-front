@@ -181,6 +181,7 @@ When `NEXT_PUBLIC_API_BASE_URL` is configured:
 - preset scenarios populate request drafts for several traveler patterns
 - advanced JSON overrides merge into the request payload
 - the response is normalized into reusable panels such as decision summary, guest profile, candidate analysis, and debug output
+- upgrade ladder cards summarize each option with total price, nightly delta, and upgrade rationale
 
 ### `/demo/offers/logs`
 

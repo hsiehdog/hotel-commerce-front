@@ -130,7 +130,7 @@ describe("DemoChatDashboard", () => {
 
     expect(await screen.findByText("Recommended Room")).toBeTruthy();
     expect(screen.getByText("Family Suite | Flexible Rate")).toBeTruthy();
-    expect(screen.getByText("$987.00")).toBeTruthy();
+    expect(screen.getByText("$987")).toBeTruthy();
     expect(screen.getByText("I found a recommendation")).toBeTruthy();
   });
 

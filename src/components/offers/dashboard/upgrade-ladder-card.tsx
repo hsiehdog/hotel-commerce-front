@@ -46,7 +46,6 @@ function UpgradeLadderEntryCard({ entry }: { entry: UpgradeLadderEntry }) {
           </p>
           <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
             <span>Total: {formatMoney(entry.totalPrice)}</span>
-            <span>Nightly: {formatMoney(entry.nightlyPrice)}</span>
             <span>Delta: {formatMoney(entry.priceDeltaPerNight)}/night</span>
           </div>
         </div>
