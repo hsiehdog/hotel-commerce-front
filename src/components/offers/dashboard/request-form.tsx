@@ -1,6 +1,7 @@
 "use client";
 
 import { Dispatch, SetStateAction, FormEvent } from "react";
+import type { PropertyListItem } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,7 +12,6 @@ import {
   OffersDraft,
   scenarioPresets,
 } from "@/lib/offers-demo";
-import { getOrderedOfferProperties } from "../property-options";
 import { safeStringify } from "./utils";
 
 interface RequestFormProps {
@@ -26,13 +26,10 @@ interface RequestFormProps {
   setIsAdvanced: (v: boolean) => void;
   onApplyPreset: (id: string) => void;
   requestPreview: unknown;
+  propertyOptions: PropertyListItem[];
+  propertiesLoading: boolean;
+  propertiesError: string | null;
 }
-
-const propertyOptions = getOrderedOfferProperties([
-  { propertyId: "demo_property", name: "Demo Property" },
-  { propertyId: "cavallo_point", name: "Cavallo Point" },
-  { propertyId: "inn_at_mount_shasta", name: "Inn At Mount Shasta" },
-]);
 
 export function RequestForm({
   draft,
@@ -46,6 +43,9 @@ export function RequestForm({
   setIsAdvanced,
   onApplyPreset,
   requestPreview,
+  propertyOptions,
+  propertiesLoading,
+  propertiesError,
 }: RequestFormProps) {
   function handleChildrenChange(value: string) {
     const parsed = Number(value);
@@ -177,14 +177,24 @@ export function RequestForm({
                   onChange={(event) =>
                     setDraft((prev) => ({ ...prev, property_id: event.target.value }))
                   }
+                  disabled={propertiesLoading || propertyOptions.length === 0}
                   className="border-input focus-visible:border-ring focus-visible:ring-ring/50 h-9 w-full rounded-md border bg-transparent px-3 text-sm outline-none focus-visible:ring-[3px]"
                 >
-                  {propertyOptions.map((property) => (
-                    <option key={property.propertyId} value={property.propertyId}>
-                      {property.name}
+                  {propertyOptions.length === 0 ? (
+                    <option value="">
+                      {propertiesLoading ? "Loading properties..." : "No properties available"}
                     </option>
-                  ))}
+                  ) : (
+                    propertyOptions.map((property) => (
+                      <option key={property.propertyId} value={property.propertyId}>
+                        {property.name}
+                      </option>
+                    ))
+                  )}
                 </select>
+                {propertiesError ? (
+                  <p className="text-xs text-destructive">{propertiesError}</p>
+                ) : null}
               </div>
 
               <div className="grid grid-cols-2 gap-2">

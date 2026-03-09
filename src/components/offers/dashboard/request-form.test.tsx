@@ -2,11 +2,20 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { RequestForm } from "./request-form";
+import { buildOfferPropertyOptions } from "@/lib/demo-properties";
 import { buildOffersGenerateRequest, getDefaultOffersDraft, parseAdvancedJson } from "@/lib/offers-demo";
+
+const propertyOptions = buildOfferPropertyOptions([
+  { propertyId: "inn_at_mount_shasta", name: "Inn At Mount Shasta" },
+  { propertyId: "cavallo_point", name: "Cavallo Point" },
+]);
 
 describe("RequestForm", () => {
   it("includes chat as a selectable channel in Advanced mode", () => {
-    const draft = getDefaultOffersDraft();
+    const draft = {
+      ...getDefaultOffersDraft(),
+      property_id: propertyOptions[0].propertyId,
+    };
     const advanced = parseAdvancedJson(draft.extraJson);
     const requestPreview = buildOffersGenerateRequest(draft, advanced.data);
 
@@ -23,6 +32,9 @@ describe("RequestForm", () => {
         setIsAdvanced={vi.fn()}
         onApplyPreset={vi.fn()}
         requestPreview={requestPreview}
+        propertyOptions={propertyOptions}
+        propertiesLoading={false}
+        propertiesError={null}
       />,
     );
 
@@ -32,8 +44,11 @@ describe("RequestForm", () => {
     expect(values).toContain("chat");
   });
 
-  it("orders property options with Inn at Mount Shasta first", () => {
-    const draft = getDefaultOffersDraft();
+  it("appends demo property after the API properties", () => {
+    const draft = {
+      ...getDefaultOffersDraft(),
+      property_id: propertyOptions[0].propertyId,
+    };
     const advanced = parseAdvancedJson(draft.extraJson);
     const requestPreview = buildOffersGenerateRequest(draft, advanced.data);
 
@@ -50,6 +65,9 @@ describe("RequestForm", () => {
         setIsAdvanced={vi.fn()}
         onApplyPreset={vi.fn()}
         requestPreview={requestPreview}
+        propertyOptions={propertyOptions}
+        propertiesLoading={false}
+        propertiesError={null}
       />,
     );
 

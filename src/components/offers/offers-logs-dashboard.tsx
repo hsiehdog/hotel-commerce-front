@@ -1,13 +1,12 @@
 "use client";
 
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useMemo, useState } from "react";
 import {
   AuditOutboxState,
   fetchOffersLogDetail,
   fetchOffersLogs,
-  fetchProperties,
 } from "@/lib/api-client";
 import { ParsedOffersResponse } from "@/lib/offers-demo";
 import { Badge } from "@/components/ui/badge";
@@ -19,7 +18,7 @@ import { cn } from "@/lib/utils";
 import { asRecord } from "./dashboard/utils";
 import { buildEffectiveConfigRows } from "./dashboard/dashboard-logic";
 import { DecisionPanels } from "./dashboard/decision-panels";
-import { getOrderedOfferProperties } from "./property-options";
+import { useOfferPropertyOptions } from "./use-offer-property-options";
 import {
   buildRoomFallbackFromRow,
   formatBasicOfferDetails,
@@ -31,7 +30,6 @@ import {
   type BasicOfferDetails,
 } from "./offers-logs-dashboard-helpers";
 
-const DEFAULT_PROPERTY_ID = "demo_property";
 const ALL_TIME_FROM_ISO = "1970-01-01T00:00:00.000Z";
 const ALL_TIME_TO_ISO = "9999-12-31T23:59:59.999Z";
 
@@ -74,62 +72,31 @@ function getOutboxBadgeVariant(state?: AuditOutboxState | null): "outline" | "se
 }
 
 export function OffersLogsDashboard() {
-  const pathname = usePathname();
-  const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
 
-  const [propertyId, setPropertyId] = useState(() => searchParams.get("propertyId") ?? DEFAULT_PROPERTY_ID);
+  const [propertyId, setPropertyId] = useState("");
   const [selectedDecisionId, setSelectedDecisionId] = useState(
     () => searchParams.get("selectedDecisionId") ?? "",
   );
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [expandedCandidate, setExpandedCandidate] = useState<string | null>(null);
-
-  const propertiesQuery = useQuery({
-    queryKey: ["offer-log-properties"],
-    queryFn: () => fetchProperties({ activeOnly: true }),
-  });
-
-  const propertyOptions = useMemo(() => {
-    const apiProperties = propertiesQuery.data ?? [];
-    const propertiesById = new Map(apiProperties.map((property) => [property.propertyId, property]));
-
-    const mergedProperties = [
-      propertiesById.get("inn_at_mount_shasta") ?? {
-        propertyId: "inn_at_mount_shasta",
-        name: "Inn At Mount Shasta",
-      },
-      propertiesById.get("cavallo_point") ?? {
-        propertyId: "cavallo_point",
-        name: "Cavallo Point",
-      },
-      propertiesById.get(DEFAULT_PROPERTY_ID) ?? {
-        propertyId: DEFAULT_PROPERTY_ID,
-        name: "Demo Property",
-      },
-      ...apiProperties.filter(
-        (property) =>
-          property.propertyId !== "inn_at_mount_shasta"
-          && property.propertyId !== "cavallo_point"
-          && property.propertyId !== DEFAULT_PROPERTY_ID,
-      ),
-    ];
-
-    return getOrderedOfferProperties(mergedProperties);
-  }, [propertiesQuery.data]);
+  const { defaultPropertyId, propertyOptions } = useOfferPropertyOptions("offer-log-properties");
+  const selectedPropertyId = propertyOptions.some((property) => property.propertyId === propertyId)
+    ? propertyId
+    : defaultPropertyId;
 
   const listQuery = useInfiniteQuery({
-    queryKey: ["offer-logs", propertyId],
+    queryKey: ["offer-logs", selectedPropertyId],
     queryFn: ({ pageParam }) =>
       fetchOffersLogs({
-        propertyId,
+        propertyId: selectedPropertyId,
         from: ALL_TIME_FROM_ISO,
         to: ALL_TIME_TO_ISO,
         cursor: pageParam as string | undefined,
         limit: 25,
       }),
-    enabled: Boolean(propertyId),
+    enabled: Boolean(selectedPropertyId),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => (lastPage.pageInfo.hasMore ? lastPage.pageInfo.nextCursor : undefined),
   });
@@ -144,22 +111,6 @@ export function OffersLogsDashboard() {
     queryFn: () => fetchOffersLogDetail(selectedDecisionId, { includeRawPayloads: true, payloadCapKb: 512 }),
     enabled: Boolean(selectedDecisionId),
   });
-
-  useEffect(() => {
-    const params = new URLSearchParams();
-    if (propertyId) {
-      params.set("propertyId", propertyId);
-    }
-    if (selectedDecisionId) {
-      params.set("selectedDecisionId", selectedDecisionId);
-    }
-
-    const next = params.toString();
-    const current = searchParams.toString();
-    if (next !== current) {
-      router.replace(`${pathname}?${next}`, { scroll: false });
-    }
-  }, [pathname, propertyId, router, searchParams, selectedDecisionId]);
 
   function openDetail(decisionId: string) {
     setSelectedDecisionId(decisionId);
@@ -260,7 +211,7 @@ export function OffersLogsDashboard() {
               <label htmlFor="propertyId" className="text-sm font-medium">Property</label>
               <select
                 id="propertyId"
-                value={propertyId}
+                value={selectedPropertyId}
                 onChange={(event) => {
                   setPropertyId(event.target.value);
                   setSelectedDecisionId("");
@@ -288,7 +239,7 @@ export function OffersLogsDashboard() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {!propertyId ? (
+          {!selectedPropertyId ? (
             <p className="text-sm text-muted-foreground">Select a property to load logs.</p>
           ) : listQuery.isPending ? (
             <div className="space-y-2">

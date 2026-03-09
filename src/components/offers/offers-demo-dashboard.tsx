@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   OffersDraft,
   OffersRequestError,
@@ -16,6 +16,7 @@ import {
 import { buildEffectiveConfigRows } from "./dashboard/dashboard-logic";
 import { DecisionPanels } from "./dashboard/decision-panels";
 import { RequestForm } from "./dashboard/request-form";
+import { useOfferPropertyOptions } from "./use-offer-property-options";
 import { Card, CardContent } from "@/components/ui/card";
 import { asRecord } from "./dashboard/utils";
 
@@ -29,6 +30,13 @@ export function OffersDemoDashboard() {
   const [rawResponse, setRawResponse] = useState<unknown>(null);
   const [parsedResponse, setParsedResponse] = useState<ParsedOffersResponse | null>(null);
   const [expandedCandidate, setExpandedCandidate] = useState<string | null>(null);
+
+  const {
+    defaultPropertyId,
+    propertyOptions,
+    propertiesError,
+    propertiesLoading,
+  } = useOfferPropertyOptions("offer-demo-properties");
 
   const advancedJson = useMemo(() => parseAdvancedJson(draft.extraJson), [draft.extraJson]);
   const requestPreview = useMemo(
@@ -45,6 +53,15 @@ export function OffersDemoDashboard() {
     () => buildEffectiveConfigRows(parsedResponse, requestPayload),
     [parsedResponse, requestPayload],
   );
+
+  useEffect(() => {
+    if (
+      draft.property_id !== defaultPropertyId
+      && !propertyOptions.some((property) => property.propertyId === draft.property_id)
+    ) {
+      setDraft((prev) => ({ ...prev, property_id: defaultPropertyId }));
+    }
+  }, [defaultPropertyId, draft.property_id, propertyOptions]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -107,7 +124,7 @@ export function OffersDemoDashboard() {
           isSubmitting={isSubmitting}
           onSubmit={handleSubmit}
           onReset={() => {
-            setDraft(getDefaultOffersDraft());
+            setDraft(getDefaultOffersDraft(defaultPropertyId));
             setFormErrors([]);
             setApiError(null);
           }}
@@ -117,6 +134,9 @@ export function OffersDemoDashboard() {
           setIsAdvanced={setIsAdvanced}
           onApplyPreset={applyPreset}
           requestPreview={requestPreview}
+          propertyOptions={propertyOptions}
+          propertiesLoading={propertiesLoading}
+          propertiesError={propertiesError}
         />
       </div>
 

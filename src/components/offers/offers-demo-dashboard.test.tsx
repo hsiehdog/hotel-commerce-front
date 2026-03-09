@@ -1,8 +1,10 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { OffersDemoDashboard } from "@/components/offers/offers-demo-dashboard";
+import * as apiClient from "@/lib/api-client";
 import * as offersDemo from "@/lib/offers-demo";
 
 vi.mock("@/lib/offers-demo", async () => {
@@ -16,17 +18,50 @@ vi.mock("@/lib/offers-demo", async () => {
   };
 });
 
+vi.mock("@/lib/api-client", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/api-client")>(
+    "@/lib/api-client",
+  );
+
+  return {
+    ...actual,
+    fetchProperties: vi.fn(),
+  };
+});
+
 const mockedRequestOfferGeneration = vi.mocked(offersDemo.requestOfferGeneration);
+const mockedFetchProperties = vi.mocked(apiClient.fetchProperties);
+
+function renderDashboard() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+    },
+  });
+
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <OffersDemoDashboard />
+    </QueryClientProvider>,
+  );
+}
 
 describe("OffersDemoDashboard", () => {
   beforeEach(() => {
     mockedRequestOfferGeneration.mockReset();
+    mockedFetchProperties.mockReset();
+    mockedFetchProperties.mockResolvedValue([
+      { propertyId: "inn_at_mount_shasta", name: "Inn At Mount Shasta" },
+      { propertyId: "cavallo_point", name: "Cavallo Point" },
+    ]);
   });
 
   it("keeps advanced controls hidden in Basic mode and shows them in Advanced mode", async () => {
     const user = userEvent.setup();
 
-    render(<OffersDemoDashboard />);
+    renderDashboard();
 
     expect(screen.queryByLabelText("Demo scenario")).toBeNull();
 
@@ -97,7 +132,7 @@ describe("OffersDemoDashboard", () => {
       },
     });
 
-    render(<OffersDemoDashboard />);
+    renderDashboard();
 
     await user.type(screen.getByLabelText("Check-in"), "2026-03-10");
     await user.type(screen.getByLabelText("Check-out"), "2026-03-12");
@@ -132,7 +167,7 @@ describe("OffersDemoDashboard", () => {
       },
     });
 
-    render(<OffersDemoDashboard />);
+    renderDashboard();
 
     await user.type(screen.getByLabelText("Check-in"), "2026-03-10");
     await user.type(screen.getByLabelText("Check-out"), "2026-03-12");
@@ -148,7 +183,7 @@ describe("OffersDemoDashboard", () => {
   it("resets constraints when applying a scenario preset", async () => {
     const user = userEvent.setup();
 
-    render(<OffersDemoDashboard />);
+    renderDashboard();
 
     const petFriendly = screen.getByLabelText("Pet friendly") as HTMLInputElement;
     expect(petFriendly.checked).toBe(false);
@@ -184,7 +219,7 @@ describe("OffersDemoDashboard", () => {
       },
     });
 
-    render(<OffersDemoDashboard />);
+    renderDashboard();
 
     await user.click(screen.getByRole("button", { name: "Couple getaway" }));
 
@@ -204,16 +239,46 @@ describe("OffersDemoDashboard", () => {
   it("keeps the selected property when applying a scenario preset", async () => {
     const user = userEvent.setup();
 
-    render(<OffersDemoDashboard />);
+    renderDashboard();
 
     const property = screen.getByLabelText("Property") as HTMLSelectElement;
-    expect(property.value).toBe("demo_property");
+    await waitFor(() => {
+      expect(property.value).toBe("inn_at_mount_shasta");
+    });
 
-    await user.selectOptions(property, "inn_at_mount_shasta");
-    expect(property.value).toBe("inn_at_mount_shasta");
+    await user.selectOptions(property, "cavallo_point");
+    expect(property.value).toBe("cavallo_point");
 
     await user.click(screen.getByRole("button", { name: "Extended stay" }));
 
-    expect((screen.getByLabelText("Property") as HTMLSelectElement).value).toBe("inn_at_mount_shasta");
+    expect((screen.getByLabelText("Property") as HTMLSelectElement).value).toBe("cavallo_point");
+  });
+
+  it("defaults the property to the first API option", async () => {
+    renderDashboard();
+
+    await waitFor(() => {
+      expect((screen.getByLabelText("Property") as HTMLSelectElement).value).toBe("inn_at_mount_shasta");
+    });
+  });
+
+  it("appends demo property after the API properties", async () => {
+    mockedFetchProperties.mockResolvedValue([
+      { propertyId: "cavallo_point", name: "Cavallo Point" },
+      { propertyId: "inn_at_mount_shasta", name: "Inn At Mount Shasta" },
+    ]);
+
+    renderDashboard();
+
+    await waitFor(() => {
+      const property = screen.getByLabelText("Property") as HTMLSelectElement;
+      const values = Array.from(property.options).map((option) => option.value);
+
+      expect(values).toEqual([
+        "cavallo_point",
+        "inn_at_mount_shasta",
+        "demo_property",
+      ]);
+    });
   });
 });

@@ -111,7 +111,35 @@ describe("OffersLogsDashboard", () => {
     });
   });
 
-  it("orders property options with the preferred demo properties first", async () => {
+  it("defaults the selected property to the first API option", async () => {
+    mockedFetchOffersLogs.mockResolvedValue({
+      serverNow: new Date().toISOString(),
+      pageInfo: {
+        hasMore: false,
+        limit: 25,
+      },
+      rows: [],
+    });
+
+    renderDashboard();
+
+    await waitFor(() => {
+      const property = screen.getByLabelText("Property") as HTMLSelectElement;
+      expect(property.value).toBe("demo_hotel_sf");
+    });
+
+    await waitFor(() => {
+      expect(mockedFetchOffersLogs).toHaveBeenCalledWith(
+        expect.objectContaining({
+          propertyId: "demo_hotel_sf",
+        }),
+      );
+    });
+
+    expect(replaceMock).not.toHaveBeenCalled();
+  });
+
+  it("appends demo property after the API properties", async () => {
     mockedFetchOffersLogs.mockResolvedValue({
       serverNow: new Date().toISOString(),
       pageInfo: {
@@ -122,7 +150,6 @@ describe("OffersLogsDashboard", () => {
     });
 
     mockedFetchProperties.mockResolvedValue([
-      { propertyId: "demo_property", name: "Demo Property" },
       { propertyId: "cavallo_point", name: "Cavallo Point" },
       { propertyId: "inn_at_mount_shasta", name: "Inn At Mount Shasta" },
       { propertyId: "zeta_property", name: "Zeta Property" },
@@ -135,10 +162,10 @@ describe("OffersLogsDashboard", () => {
       const values = Array.from(property.options).map((option) => option.value);
 
       expect(values).toEqual([
-        "inn_at_mount_shasta",
         "cavallo_point",
-        "demo_property",
+        "inn_at_mount_shasta",
         "zeta_property",
+        "demo_property",
       ]);
     });
   });

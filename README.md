@@ -79,8 +79,9 @@ If `NEXT_PUBLIC_API_BASE_URL` is not set:
 Important exception:
 
 - `/demo/offers` does not use `src/lib/api-client.ts`
-- it sends `fetch` requests directly to `${NEXT_PUBLIC_API_BASE_URL}/offers/generate`
+- it still sends `fetch` requests directly to `${NEXT_PUBLIC_API_BASE_URL}/offers/generate`
 - if no base URL is configured, it falls back to `/offers/generate` on the current origin
+- its property dropdown does use `GET /properties` through the shared offer property hook
 
 ## Routes
 
@@ -139,7 +140,10 @@ The parser accepts mixed camelCase or snake_case response payloads and expects d
 
 Current UI behavior:
 
-- the logs screen always filters by `propertyId`
+- both `/demo/offers` and `/demo/offers/logs` load property options from `GET /properties`
+- the dropdown keeps backend order and appends `Demo Property` as the final option
+- both screens default to the first backend property when one exists, otherwise `Demo Property`
+- the logs screen filters by the currently selected property in local component state
 - list queries use an all-time range with pagination via `cursor`
 - detail fetches request `includeRawPayloads=true` and `payloadCapKb=512`
 - the detail screen maps log payloads back into the same decision panels used by `/demo/offers`
@@ -179,15 +183,18 @@ When `NEXT_PUBLIC_API_BASE_URL` is configured:
 ### `/demo/offers`
 
 - preset scenarios populate request drafts for several traveler patterns
+- property options come from `GET /properties`, with `Demo Property` appended as a fallback/demo entry
 - advanced JSON overrides merge into the request payload
 - the response is normalized into reusable panels such as decision summary, guest profile, candidate analysis, and debug output
 - upgrade ladder cards summarize each option with total price, nightly delta, and upgrade rationale
 
 ### `/demo/offers/logs`
 
-- the list view is table-first and keeps selection state in URL search params
+- property options come from `GET /properties`, with `Demo Property` appended as the final option
+- the list view is table-first and keeps property selection in local state
 - opening a decision prefetches detail data
 - detail rendering falls back gracefully when only partial log data is available
+- `selectedDecisionId` still initializes from URL search params when present
 
 ### `/demo/chat`
 
@@ -208,6 +215,7 @@ When `NEXT_PUBLIC_API_BASE_URL` is configured:
 | `src/components/ui` | shadcn/ui primitives |
 | `src/hooks` | React Query hooks |
 | `src/lib/api-client.ts` | Backend client, normalization, and mocks |
+| `src/lib/demo-properties.ts` | Shared demo property option helpers |
 | `src/lib/offers-demo.ts` | Offer request builder, presets, validation, and response parsing |
 | `src/test/setup.js` | Vitest setup |
 

@@ -293,9 +293,9 @@ export type ParsedOffersResponse = {
   raw: Record<string, unknown>;
 };
 
-export function getDefaultOffersDraft(): OffersDraft {
+export function getDefaultOffersDraft(propertyId = ""): OffersDraft {
   return {
-    property_id: "demo_property",
+    property_id: propertyId,
     channel: "web",
     check_in: "",
     check_out: "",
