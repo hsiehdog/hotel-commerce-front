@@ -145,8 +145,8 @@ describe("DemoCheckoutDashboard", () => {
     await user.type(screen.getByLabelText("Check-out"), "2026-03-12");
     await user.click(screen.getByRole("button", { name: "Find my stay" }));
 
-    expect((await screen.findAllByText("Recommended stay")).length).toBeGreaterThan(0);
-    expect(screen.getByText("Family Suite | Flexible Rate")).toBeTruthy();
+    expect((await screen.findAllByText("Family Suite")).length).toBeGreaterThan(0);
+    expect(screen.getByText("Flexible Rate")).toBeTruthy();
     expect(screen.getByText("Per night")).toBeTruthy();
     expect(screen.getByText("$329")).toBeTruthy();
     expect(screen.getAllByText("Upgrade ladder").length).toBeGreaterThan(0);

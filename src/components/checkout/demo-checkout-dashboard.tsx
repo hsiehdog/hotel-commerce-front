@@ -302,7 +302,6 @@ export function DemoCheckoutDashboard() {
               <CardTitle className="text-xl">
                 {propertiesLoading ? "Loading property..." : selectedPropertyName}
               </CardTitle>
-              <CardDescription>Start with the essentials. We will guide the rest of the booking.</CardDescription>
             </CardHeader>
             <CardContent>
               <form className="space-y-5" onSubmit={handleOfferSubmit}>
@@ -447,7 +446,7 @@ function CheckoutRecommendationPanel({
   return (
     <div className="space-y-6">
       {parsedResponse.recommendedRoom ? (
-        <DecisionOfferCard title="Recommended stay" offer={parsedResponse.recommendedRoom} />
+        <DecisionOfferCard title={parsedResponse.recommendedRoom.roomType} offer={parsedResponse.recommendedRoom} />
       ) : (
         <Card className="border-amber-300/70 bg-amber-50 shadow-sm">
           <CardHeader>

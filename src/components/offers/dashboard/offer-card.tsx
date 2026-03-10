@@ -24,6 +24,8 @@ export function DecisionOfferCard({ title, offer }: DecisionOfferCardProps) {
     );
   }
 
+  const description = title === offer.roomType ? offer.ratePlan : `${offer.roomType} | ${offer.ratePlan}`;
+
   return (
     <Card className="border-emerald-300/70 bg-emerald-50/60 dark:bg-emerald-950/30">
       <CardHeader className="pb-2">
@@ -31,9 +33,7 @@ export function DecisionOfferCard({ title, offer }: DecisionOfferCardProps) {
           <CardTitle className="text-lg">{title}</CardTitle>
           <Badge className="bg-emerald-600 hover:bg-emerald-700">Recommended</Badge>
         </div>
-        <CardDescription className="text-xs">
-          {offer.roomType} | {offer.ratePlan}
-        </CardDescription>
+        <CardDescription className="text-xs">{description}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 text-sm">
         <div className="rounded-md border bg-muted/20 p-3">
