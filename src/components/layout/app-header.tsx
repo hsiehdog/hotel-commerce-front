@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 const links = [
+  { href: "/demo", label: "Checkout" },
   { href: "/demo/offers", label: "Offer Generator" },
   { href: "/demo/offers/logs", label: "Logs" },
   { href: "/demo/chat", label: "Chat" },
@@ -20,7 +21,7 @@ export function AppHeader() {
     <header className="sticky top-0 z-30 border-b bg-background/80 backdrop-blur">
       <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4">
         <div className="flex items-center gap-4">
-          <Link href="/demo/offers" className="flex items-center gap-2 font-semibold">
+          <Link href="/demo" className="flex items-center gap-2 font-semibold">
             <MessageSquareMore className="h-5 w-5 text-primary" />
             <span>Hotel CommerceCo</span>
             <Badge variant="outline" className="text-xs">
