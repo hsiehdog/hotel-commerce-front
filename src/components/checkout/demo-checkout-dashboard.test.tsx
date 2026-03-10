@@ -126,7 +126,10 @@ describe("DemoCheckoutDashboard", () => {
             price_delta_total: 140,
             price_delta_per_night: 70,
             upgrade_level: "next_step",
-            reasons: ["Only $70 more per night than your current option"],
+            reasons: [
+              "Only $70 more per night than your current option",
+              "Separate sleeping area makes the stay more comfortable",
+            ],
             benefit_summary: ["Suite-level upgrade with more living space"],
             ladder_score: 0.74,
           },
@@ -144,8 +147,13 @@ describe("DemoCheckoutDashboard", () => {
 
     expect((await screen.findAllByText("Recommended stay")).length).toBeGreaterThan(0);
     expect(screen.getByText("Family Suite | Flexible Rate")).toBeTruthy();
+    expect(screen.getByText("Per night")).toBeTruthy();
+    expect(screen.getByText("$329")).toBeTruthy();
     expect(screen.getAllByText("Upgrade ladder").length).toBeGreaterThan(0);
     expect(screen.getByText("Bunk Suite")).toBeTruthy();
+    expect(screen.getByText("Why upgrade")).toBeTruthy();
+    expect(screen.getByText("Only $70 more per night than your current option")).toBeTruthy();
+    expect(screen.getByText("Separate sleeping area makes the stay more comfortable")).toBeTruthy();
     expect(screen.getByText("Recommended add-ons")).toBeTruthy();
     expect(screen.getByText("Breakfast package")).toBeTruthy();
   });

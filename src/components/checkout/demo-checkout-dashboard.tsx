@@ -380,12 +380,11 @@ export function DemoCheckoutDashboard() {
                   </div>
                 ) : null}
 
-                <div className="flex flex-wrap items-center gap-3">
+                <div className="flex justify-end">
                   <Button type="submit" className="rounded-full px-5" disabled={isSubmitting}>
                     {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
                     Find my stay
                   </Button>
-                  <p className="text-sm text-muted-foreground">We use the same recommendation engine as the operator demo.</p>
                 </div>
               </form>
             </CardContent>
@@ -478,8 +477,11 @@ function UpgradeLadderSummary({ entries }: { entries: UpgradeLadderEntry[] }) {
           <p className="text-sm text-muted-foreground">No higher room categories were returned above the recommended stay.</p>
         ) : (
           <div className="space-y-3">
-            {entries.map((entry) => (
-              <div key={`${entry.roomTypeId}-${entry.ratePlanId}`} className="rounded-3xl border border-border/70 bg-slate-50 p-4">
+            {entries.map((entry) => {
+              const upgradeReasons = entry.reasons.length > 0 ? entry.reasons : entry.benefitSummary;
+
+              return (
+                <div key={`${entry.roomTypeId}-${entry.ratePlanId}`} className="rounded-3xl border border-border/70 bg-slate-50 p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="font-medium text-foreground">{entry.roomType}</p>
@@ -492,14 +494,19 @@ function UpgradeLadderSummary({ entries }: { entries: UpgradeLadderEntry[] }) {
                     </p>
                   </div>
                 </div>
-                {entry.benefitSummary.length > 0 ? (
-                  <p className="mt-3 text-sm text-muted-foreground">{entry.benefitSummary.join(" • ")}</p>
-                ) : null}
-                {entry.reasons.length > 0 ? (
-                  <p className="mt-2 text-xs text-muted-foreground">{entry.reasons[0]}</p>
+                {upgradeReasons.length > 0 ? (
+                  <div className="mt-3 border-t border-border/60 pt-3">
+                    <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Why upgrade</p>
+                    <ul className="list-disc pl-4 text-xs text-muted-foreground">
+                      {upgradeReasons.map((reason) => (
+                        <li key={`${entry.ratePlanId}-${reason}`}>{reason}</li>
+                      ))}
+                    </ul>
+                  </div>
                 ) : null}
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </CardContent>
@@ -512,7 +519,6 @@ function RecommendedAddOns({ offers }: { offers: RecommendedUpsell[] }) {
     <Card className="border-border/60 bg-white shadow-sm">
       <CardHeader>
         <CardTitle className="text-base">Recommended add-ons</CardTitle>
-        <CardDescription>These are the extras the same engine thinks fit this stay best.</CardDescription>
       </CardHeader>
       <CardContent>
         {offers.length === 0 ? (
@@ -522,12 +528,7 @@ function RecommendedAddOns({ offers }: { offers: RecommendedUpsell[] }) {
             {offers.map((offer) => (
               <div key={`${offer.bundleType}-${offer.label}`} className="rounded-3xl border border-border/70 bg-slate-50 p-4">
                 <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-medium text-foreground">{offer.label}</p>
-                    <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                      {offer.bundleType || "Add-on"}
-                    </p>
-                  </div>
+                  <p className="font-medium text-foreground">{offer.label}</p>
                   {offer.estimatedPriceDelta !== null ? (
                     <span className="text-sm font-semibold text-foreground">{formatMoney(offer.estimatedPriceDelta)}</span>
                   ) : null}

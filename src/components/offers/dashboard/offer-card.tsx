@@ -37,10 +37,12 @@ export function DecisionOfferCard({ title, offer }: DecisionOfferCardProps) {
       </CardHeader>
       <CardContent className="space-y-4 text-sm">
         <div className="rounded-md border bg-muted/20 p-3">
-          <div className="flex items-baseline justify-between border-b border-dashed pb-2">
-            <span className="text-xs font-medium text-muted-foreground">Total Price</span>
-            <span className="text-lg font-bold text-primary">{formatMoney(offer.totalPrice)}</span>
-          </div>
+          {offer.nightlyPrice !== null ? (
+            <div className="flex items-baseline justify-between border-b border-dashed pb-2">
+              <span className="text-xs font-medium text-muted-foreground">Per night</span>
+              <span className="text-base font-semibold text-foreground">{formatMoney(offer.nightlyPrice)}</span>
+            </div>
+          ) : null}
           <div className="mt-2 space-y-1 text-xs text-muted-foreground">
             {buildBreakdownRows(offer).map((row) => (
               <div key={`${offer.roomTypeId}-${row.label}`} className="flex justify-between">
@@ -48,6 +50,10 @@ export function DecisionOfferCard({ title, offer }: DecisionOfferCardProps) {
                 <span className="font-mono">{formatMoney(row.amount)}</span>
               </div>
             ))}
+          </div>
+          <div className="mt-3 flex items-baseline justify-between border-t border-dashed pt-3">
+            <span className="text-xs font-medium text-muted-foreground">Total Price</span>
+            <span className="text-lg font-bold text-primary">{formatMoney(offer.totalPrice)}</span>
           </div>
         </div>
 
