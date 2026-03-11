@@ -13,13 +13,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import {
   ApiClientRequestError,
-  createChatSession,
-  getChatRecommendedRoomFromResponse,
-  getChatResponseUi,
-  sendChatSessionMessage,
-  type ChatSession,
+  answerConciergeQuestion,
 } from "@/lib/api-client";
 import {
+  buildRoomOccupancies,
   buildOffersGenerateRequest,
   getDefaultOffersDraft,
   parseOffersResponse,
@@ -59,6 +56,11 @@ function toPositiveNumber(value: string, minimum: number): string {
   return String(Math.max(minimum, Math.floor(parsed)));
 }
 
+function normalizeChildrenCount(value: string): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 0;
+}
+
 export function DemoCheckoutDashboard() {
   const searchParams = useSearchParams();
   const { defaultPropertyId, propertyOptions, propertiesLoading } = useOfferPropertyOptions("checkout-properties");
@@ -68,10 +70,8 @@ export function DemoCheckoutDashboard() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [parsedResponse, setParsedResponse] = useState<ParsedOffersResponse | null>(null);
 
-  const [chatSession, setChatSession] = useState<ChatSession | null>(null);
   const [chatMessages, setChatMessages] = useState<DemoChatMessageItem[]>([]);
   const [chatError, setChatError] = useState<string | null>(null);
-  const [isChatLoading, setIsChatLoading] = useState(true);
   const [isChatSending, setIsChatSending] = useState(false);
   const [composerValue, setComposerValue] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -105,52 +105,16 @@ export function DemoCheckoutDashboard() {
     if (!resolvedPropertyId) {
       return;
     }
-
-    let cancelled = false;
-
-    async function startSession() {
-      setIsChatLoading(true);
-      setChatError(null);
-
-      try {
-        const session = await createChatSession({
-          property_id: resolvedPropertyId,
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-          language: typeof navigator !== "undefined" ? navigator.language : "en-US",
-        });
-        if (cancelled) {
-          return;
-        }
-
-        setChatSession(session);
-        setChatMessages([
-          {
-            id: `${session.sessionId}-greeting`,
-            role: "assistant",
-            text: session.greeting,
-            createdAt: session.createdAt,
-          },
-        ]);
-      } catch (error) {
-        if (cancelled) {
-          return;
-        }
-
-        setChatSession(null);
-        setChatMessages([]);
-        setChatError(error instanceof Error ? error.message : "Unable to start concierge chat.");
-      } finally {
-        if (!cancelled) {
-          setIsChatLoading(false);
-        }
-      }
-    }
-
-    void startSession();
-
-    return () => {
-      cancelled = true;
-    };
+    setChatError(null);
+    setComposerValue("");
+    setChatMessages([
+      {
+        id: `${resolvedPropertyId}-greeting`,
+        role: "assistant",
+        text: "Ask about the property, amenities, parking, policies, or nearby recommendations.",
+        createdAt: new Date().toISOString(),
+      },
+    ]);
   }, [resolvedPropertyId]);
 
   useEffect(() => {
@@ -185,37 +149,20 @@ export function DemoCheckoutDashboard() {
   }
 
   async function restartChat() {
-    setIsChatLoading(true);
     setChatError(null);
-
-    try {
-      const session = await createChatSession({
-        property_id: resolvedPropertyId || DEFAULT_PROPERTY_ID,
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        language: typeof navigator !== "undefined" ? navigator.language : "en-US",
-      });
-
-      setChatSession(session);
-      setChatMessages([
-        {
-          id: `${session.sessionId}-greeting`,
-          role: "assistant",
-          text: session.greeting,
-          createdAt: session.createdAt,
-        },
-      ]);
-      setComposerValue("");
-    } catch (error) {
-      setChatSession(null);
-      setChatMessages([]);
-      setChatError(error instanceof Error ? error.message : "Unable to restart concierge chat.");
-    } finally {
-      setIsChatLoading(false);
-    }
+    setComposerValue("");
+    setChatMessages([
+      {
+        id: `${resolvedPropertyId || DEFAULT_PROPERTY_ID}-greeting-${Date.now()}`,
+        role: "assistant",
+        text: "Ask about the property, amenities, parking, policies, or nearby recommendations.",
+        createdAt: new Date().toISOString(),
+      },
+    ]);
   }
 
   async function sendMessage() {
-    if (!chatSession || isChatSending) {
+    if (!resolvedPropertyId || isChatSending) {
       return;
     }
 
@@ -244,29 +191,18 @@ export function DemoCheckoutDashboard() {
     setIsChatSending(true);
 
     try {
-      const response = await sendChatSessionMessage(chatSession.sessionId, {
-        message,
-        clientMessageId,
-        metadata: {
-          locale: typeof navigator !== "undefined" ? navigator.language : "en-US",
-          device: typeof window !== "undefined" && window.innerWidth < 768 ? "mobile" : "desktop",
-        },
-      });
+      const response = await answerConciergeQuestion(resolvedPropertyId, message);
 
       setChatMessages((current) => [
         ...current,
         {
           id: `${clientMessageId}-assistant`,
           role: "assistant",
-          text: response.assistantMessage,
+          text: response.answer,
           createdAt: new Date().toISOString(),
-          status: response.status,
-          nextAction: response.nextAction,
-          pendingAction: response.pendingAction ?? null,
-          responseUi: getChatResponseUi(response),
-          recommendedRoom: getChatRecommendedRoomFromResponse(response),
-          decisionId: response.decisionId,
-          isRetryable: false,
+          answerType: response.answerType,
+          confidence: response.confidence,
+          sources: response.sources,
         },
       ]);
     } catch (error) {
@@ -292,6 +228,59 @@ export function DemoCheckoutDashboard() {
 
     event.preventDefault();
     await sendMessage();
+  }
+
+  function handleRoomsChange(value: string) {
+    const nextRooms = normalizeChildrenCount(value) || 1;
+
+    setDraft((current) => ({
+      ...current,
+      rooms: String(nextRooms),
+      roomOccupancies: buildRoomOccupancies(
+        nextRooms,
+        Number(current.adults),
+        Number(current.children),
+      ),
+    }));
+  }
+
+  function handleAdultsChange(value: string) {
+    const nextAdults = Number(toPositiveNumber(value, 1));
+
+    setDraft((current) => ({
+      ...current,
+      adults: String(nextAdults),
+      roomOccupancies: buildRoomOccupancies(
+        Number(current.rooms),
+        nextAdults,
+        Number(current.children),
+      ),
+    }));
+  }
+
+  function handleChildrenChange(value: string) {
+    const nextChildren = normalizeChildrenCount(value);
+
+    setDraft((current) => {
+      const nextAges = [...current.child_ages];
+      if (nextAges.length > nextChildren) {
+        nextAges.length = nextChildren;
+      }
+      while (nextAges.length < nextChildren) {
+        nextAges.push(0);
+      }
+
+      return {
+        ...current,
+        children: String(nextChildren),
+        child_ages: nextAges,
+        roomOccupancies: buildRoomOccupancies(
+          Number(current.rooms),
+          Number(current.adults),
+          nextChildren,
+        ),
+      };
+    });
   }
 
   return (
@@ -334,9 +323,7 @@ export function DemoCheckoutDashboard() {
                       type="number"
                       min={1}
                       value={draft.rooms}
-                      onChange={(event) =>
-                        setDraft((current) => ({ ...current, rooms: toPositiveNumber(event.target.value, 1) }))
-                      }
+                      onChange={(event) => handleRoomsChange(event.target.value)}
                     />
                   </div>
                   <div className="space-y-2">
@@ -346,9 +333,7 @@ export function DemoCheckoutDashboard() {
                       type="number"
                       min={1}
                       value={draft.adults}
-                      onChange={(event) =>
-                        setDraft((current) => ({ ...current, adults: toPositiveNumber(event.target.value, 1) }))
-                      }
+                      onChange={(event) => handleAdultsChange(event.target.value)}
                     />
                   </div>
                   <div className="space-y-2">
@@ -358,12 +343,40 @@ export function DemoCheckoutDashboard() {
                       type="number"
                       min={0}
                       value={draft.children}
-                      onChange={(event) =>
-                        setDraft((current) => ({ ...current, children: toPositiveNumber(event.target.value, 0) }))
-                      }
+                      onChange={(event) => handleChildrenChange(event.target.value)}
                     />
                   </div>
                 </div>
+
+                {draft.child_ages.length > 0 ? (
+                  <div className="space-y-2">
+                    <Label>Child ages</Label>
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      {draft.child_ages.map((age, index) => (
+                        <div key={`child-age-${index}`} className="space-y-2">
+                          <Label htmlFor={`child_age_${index}`}>Child {index + 1} age</Label>
+                          <Input
+                            id={`child_age_${index}`}
+                            type="number"
+                            min={0}
+                            value={age}
+                            onChange={(event) => {
+                              const nextAge = normalizeChildrenCount(event.target.value);
+                              setDraft((current) => {
+                                const nextAges = [...current.child_ages];
+                                nextAges[index] = nextAge;
+                                return {
+                                  ...current,
+                                  child_ages: nextAges,
+                                };
+                              });
+                            }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
 
                 {formErrors.length > 0 ? (
                   <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
@@ -395,9 +408,7 @@ export function DemoCheckoutDashboard() {
         <CheckoutConciergePanel
           chatError={chatError}
           chatMessages={chatMessages}
-          chatSession={chatSession}
           composerValue={composerValue}
-          isChatLoading={isChatLoading}
           isChatSending={isChatSending}
           onChatSubmit={handleChatSubmit}
           onComposerChange={setComposerValue}
@@ -432,13 +443,13 @@ function CheckoutRecommendationPanel({
   if (!parsedResponse) {
     return (
       <Card className="border-dashed border-border/70 bg-white/80 shadow-sm">
-        <CardContent className="flex min-h-[280px] flex-col items-center justify-center text-center">
-          <p className="text-lg font-semibold text-foreground">Your guided recommendation will appear here</p>
-          <p className="mt-2 max-w-lg text-sm leading-6 text-muted-foreground">
-            After you enter your dates and guest count, we will show the recommended room, upgrade ladder,
+          <CardContent className="flex min-h-[280px] flex-col items-center justify-center text-center">
+            <p className="text-lg font-semibold text-foreground">Your guided recommendation will appear here</p>
+            <p className="mt-2 max-w-lg text-sm leading-6 text-muted-foreground">
+            After you enter your dates and guest count, we will show the recommended room, upgrades,
             and add-ons in a checkout-friendly format.
-          </p>
-        </CardContent>
+            </p>
+          </CardContent>
       </Card>
     );
   }
@@ -468,7 +479,7 @@ function UpgradeLadderSummary({ entries }: { entries: UpgradeLadderEntry[] }) {
   return (
     <Card className="border-border/60 bg-white shadow-sm">
       <CardHeader>
-        <CardTitle className="text-base">Upgrade ladder</CardTitle>
+        <CardTitle className="text-base">Upgrades</CardTitle>
         <CardDescription>See the next room up if you want more space or more premium options.</CardDescription>
       </CardHeader>
       <CardContent>
@@ -547,9 +558,7 @@ function RecommendedAddOns({ offers }: { offers: RecommendedUpsell[] }) {
 type CheckoutConciergePanelProps = {
   chatError: string | null;
   chatMessages: DemoChatMessageItem[];
-  chatSession: ChatSession | null;
   composerValue: string;
-  isChatLoading: boolean;
   isChatSending: boolean;
   onChatSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   onComposerChange: (value: string) => void;
@@ -561,9 +570,7 @@ type CheckoutConciergePanelProps = {
 function CheckoutConciergePanel({
   chatError,
   chatMessages,
-  chatSession,
   composerValue,
-  isChatLoading,
   isChatSending,
   onChatSubmit,
   onComposerChange,
@@ -584,7 +591,7 @@ function CheckoutConciergePanel({
               Ask about rooms, policies, or the reservation while you review the stay.
             </CardDescription>
           </div>
-          <Button type="button" size="icon" variant="outline" onClick={() => void onRestart()} disabled={isChatLoading || isChatSending}>
+          <Button type="button" size="icon" variant="outline" onClick={() => void onRestart()} disabled={isChatSending}>
             <RefreshCcw className="h-4 w-4" />
             <span className="sr-only">Start a new concierge chat</span>
           </Button>
@@ -600,14 +607,7 @@ function CheckoutConciergePanel({
 
         <ScrollArea className="min-h-[320px] flex-1 rounded-3xl bg-slate-50">
           <div className="flex min-h-full flex-col gap-5 px-4 py-4">
-            {isChatLoading ? (
-              <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Connecting your concierge...
-              </div>
-            ) : null}
-
-            {!isChatLoading && chatMessages.map((message) => (
+            {chatMessages.map((message) => (
               <DemoChatMessage key={message.id} message={message} />
             ))}
 
@@ -623,13 +623,13 @@ function CheckoutConciergePanel({
             value={composerValue}
             onChange={(event) => onComposerChange(event.target.value)}
             onKeyDown={(event) => void onComposerKeyDown(event)}
-            placeholder={chatSession ? "Ask about your room, dates, parking, breakfast, or the property..." : "Starting concierge..."}
-            disabled={!chatSession || isChatLoading || isChatSending}
+            placeholder="Ask about your room, dates, parking, breakfast, or the property..."
+            disabled={isChatSending}
             className="min-h-24 rounded-3xl border-border/70 bg-slate-50"
           />
           <div className="flex items-center justify-between gap-3">
             <p className="text-xs text-muted-foreground">Press Enter to send, Shift+Enter for a new line.</p>
-            <Button type="submit" className="rounded-full px-5" disabled={!chatSession || isChatLoading || isChatSending}>
+            <Button type="submit" className="rounded-full px-5" disabled={isChatSending}>
               {isChatSending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <SendHorizontal className="mr-2 h-4 w-4" />}
               Send
             </Button>

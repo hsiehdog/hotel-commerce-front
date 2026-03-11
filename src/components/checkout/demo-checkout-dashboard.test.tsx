@@ -20,8 +20,7 @@ vi.mock("@/lib/api-client", async () => {
   return {
     ...actual,
     fetchProperties: vi.fn(),
-    createChatSession: vi.fn(),
-    sendChatSessionMessage: vi.fn(),
+    answerConciergeQuestion: vi.fn(),
   };
 });
 
@@ -32,20 +31,8 @@ vi.mock("next/navigation", () => ({
 }));
 
 const mockedRequestOfferGeneration = vi.mocked(offersDemo.requestOfferGeneration);
-const mockedCreateChatSession = vi.mocked(apiClient.createChatSession);
-const mockedSendChatSessionMessage = vi.mocked(apiClient.sendChatSessionMessage);
+const mockedAnswerConciergeQuestion = vi.mocked(apiClient.answerConciergeQuestion);
 const mockedFetchProperties = vi.mocked(apiClient.fetchProperties);
-
-function buildSession() {
-  return {
-    sessionId: "session-1",
-    createdAt: "2026-03-01T00:00:00.000Z",
-    expiresAt: "2099-03-01T01:00:00.000Z",
-    propertyId: "demo_property",
-    language: "en-US",
-    greeting: "Welcome to your stay planning assistant.",
-  };
-}
 
 function renderDashboard() {
   const queryClient = new QueryClient({
@@ -66,25 +53,23 @@ describe("DemoCheckoutDashboard", () => {
   beforeEach(() => {
     currentSearchParams = "";
     mockedRequestOfferGeneration.mockReset();
-    mockedCreateChatSession.mockReset();
-    mockedSendChatSessionMessage.mockReset();
+    mockedAnswerConciergeQuestion.mockReset();
     mockedFetchProperties.mockReset();
 
     mockedFetchProperties.mockResolvedValue([
       { propertyId: "inn_at_mount_shasta", name: "Inn At Mount Shasta" },
       { propertyId: "cavallo_point", name: "Cavallo Point" },
     ]);
-    mockedCreateChatSession.mockResolvedValue(buildSession());
   });
 
   it("renders an initial guided empty state and concierge greeting", async () => {
     renderDashboard();
 
     expect(screen.getByText("Your guided recommendation will appear here")).toBeTruthy();
-    expect(await screen.findByText("Welcome to your stay planning assistant.")).toBeTruthy();
+    expect(await screen.findByText("Ask about the property, amenities, parking, policies, or nearby recommendations.")).toBeTruthy();
   });
 
-  it("renders recommended stay, upgrade ladder, and add-ons from the offers API", async () => {
+  it("renders recommended stay, upgrades, and add-ons from the offers API", async () => {
     const user = userEvent.setup();
 
     mockedRequestOfferGeneration.mockResolvedValue({
@@ -149,7 +134,7 @@ describe("DemoCheckoutDashboard", () => {
     expect(screen.getByText("Flexible Rate")).toBeTruthy();
     expect(screen.getByText("Per night")).toBeTruthy();
     expect(screen.getByText("$329")).toBeTruthy();
-    expect(screen.getAllByText("Upgrade ladder").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Upgrades").length).toBeGreaterThan(0);
     expect(screen.getByText("Bunk Suite")).toBeTruthy();
     expect(screen.getByText("Why upgrade")).toBeTruthy();
     expect(screen.getByText("Only $70 more per night than your current option")).toBeTruthy();
@@ -175,79 +160,8 @@ describe("DemoCheckoutDashboard", () => {
     expect(await screen.findByText("Request failed.")).toBeTruthy();
   });
 
-  it("sends concierge messages and renders assistant responses with offer cards", async () => {
+  it("keeps child ages aligned with the children count", async () => {
     const user = userEvent.setup();
-
-    mockedSendChatSessionMessage.mockResolvedValue({
-      sessionId: "session-1",
-      assistantMessage: "I found a room that should fit this stay well.",
-      status: "OK",
-      nextAction: "PRESENT_OFFERS",
-      slots: {},
-      responseUi: {
-        type: "offer_recommendation",
-        showRecommendedRoom: true,
-        showRecommendedOffers: false,
-        showRankedRooms: false,
-      },
-      commerce: {
-        currency: "USD",
-        recommended_room: {
-          room_type: "Deluxe King",
-          rate_plan: "Flexible Rate",
-          nightly_price: 189,
-          total_price: 440,
-          score: 0.88,
-          reasons: ["Strong fit for party size"],
-          policy_summary: "Refundable rate with flexible cancellation.",
-          inventory_note: "Only 2 left at this rate.",
-          room_type_id: "rt_deluxe_king",
-          rate_plan_id: "rp_flex",
-        },
-        recommended_offers: [],
-        ranked_rooms: [],
-        fallback: null,
-      },
-      decisionId: "decision-1",
-    });
-
-    renderDashboard();
-
-    await screen.findByText("Welcome to your stay planning assistant.");
-    await user.type(screen.getByPlaceholderText("Ask about your room, dates, parking, breakfast, or the property..."), "Do you have a quieter room?");
-    await user.click(screen.getByRole("button", { name: "Send" }));
-
-    expect(await screen.findByText("I found a room that should fit this stay well.")).toBeTruthy();
-    expect(screen.getAllByText("Recommended Room").length).toBeGreaterThan(0);
-    expect(screen.getByText("Deluxe King | Flexible Rate")).toBeTruthy();
-  });
-
-  it("restarts the concierge session", async () => {
-    const user = userEvent.setup();
-
-    mockedCreateChatSession
-      .mockResolvedValueOnce(buildSession())
-      .mockResolvedValueOnce({
-        ...buildSession(),
-        sessionId: "session-2",
-        greeting: "Fresh concierge session ready.",
-      });
-
-    renderDashboard();
-
-    expect(await screen.findByText("Welcome to your stay planning assistant.")).toBeTruthy();
-
-    await user.click(screen.getByRole("button", { name: "Start a new concierge chat" }));
-
-    await waitFor(() => {
-      expect(mockedCreateChatSession).toHaveBeenCalledTimes(2);
-    });
-    expect(await screen.findByText("Fresh concierge session ready.")).toBeTruthy();
-  });
-
-  it("uses a valid propertyId query param for offer generation and concierge session scope", async () => {
-    const user = userEvent.setup();
-    currentSearchParams = "propertyId=cavallo_point";
 
     mockedRequestOfferGeneration.mockResolvedValue({
       data: {
@@ -261,14 +175,102 @@ describe("DemoCheckoutDashboard", () => {
 
     renderDashboard();
 
-    expect(await screen.findByText("Welcome to your stay planning assistant.")).toBeTruthy();
+    await user.type(screen.getByLabelText("Check-in"), "2026-03-10");
+    await user.type(screen.getByLabelText("Check-out"), "2026-03-12");
+    await user.clear(screen.getByLabelText("Children"));
+    await user.type(screen.getByLabelText("Children"), "1");
+    await user.click(screen.getByRole("button", { name: "Find my stay" }));
+
     await waitFor(() => {
-      expect(mockedCreateChatSession).toHaveBeenCalledWith(
-        expect.objectContaining({ property_id: "cavallo_point" }),
+      expect(mockedRequestOfferGeneration).toHaveBeenCalledWith(
+        expect.objectContaining({
+          children: 1,
+          child_ages: [0],
+          roomOccupancies: [{ adults: 2, children: 1 }],
+        }),
       );
     });
 
+    expect(screen.queryByText("child_ages length must match children.")).toBeNull();
+  });
+
+  it("sends concierge messages to the property answer endpoint and renders metadata", async () => {
+    const user = userEvent.setup();
+
+    mockedAnswerConciergeQuestion.mockResolvedValue({
+      answer: "Yes. Quiet-side rooms are usually available on request.",
+      confidence: 0.88,
+      sources: [{ id: "quiet-rooms", title: "Front desk fact", url: "https://example.com/front-desk-fact" }],
+      answerType: "fact",
+    });
+
+    renderDashboard();
+
+    await screen.findByText("Ask about the property, amenities, parking, policies, or nearby recommendations.");
+    await user.type(screen.getByPlaceholderText("Ask about your room, dates, parking, breakfast, or the property..."), "Do you have a quieter room?");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(mockedAnswerConciergeQuestion).toHaveBeenCalledWith("inn_at_mount_shasta", "Do you have a quieter room?");
+    expect(await screen.findByText("Yes. Quiet-side rooms are usually available on request.")).toBeTruthy();
+    expect(screen.getByText("fact")).toBeTruthy();
+    expect(screen.getByText("Confidence 88%")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Front desk fact" }).getAttribute("href")).toBe("https://example.com/front-desk-fact");
+  });
+
+  it("restarts the concierge locally", async () => {
+    const user = userEvent.setup();
+
+    mockedAnswerConciergeQuestion.mockResolvedValue({
+      answer: "Parking is complimentary.",
+      confidence: null,
+      sources: [],
+      answerType: "policy",
+    });
+
+    renderDashboard();
+
+    await screen.findByText("Ask about the property, amenities, parking, policies, or nearby recommendations.");
+    await user.type(screen.getByPlaceholderText("Ask about your room, dates, parking, breakfast, or the property..."), "What about parking?");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText("Parking is complimentary.");
+
+    await user.click(screen.getByRole("button", { name: "Start a new concierge chat" }));
+
+    await waitFor(() => {
+      expect(screen.queryByText("Parking is complimentary.")).toBeNull();
+    });
+    expect(screen.getByText("Ask about the property, amenities, parking, policies, or nearby recommendations.")).toBeTruthy();
+  });
+
+  it("uses a valid propertyId query param for offer generation and concierge scope", async () => {
+    const user = userEvent.setup();
+    currentSearchParams = "propertyId=cavallo_point";
+
+    mockedRequestOfferGeneration.mockResolvedValue({
+      data: {
+        recommended_room: null,
+        recommended_offers: [],
+        upgrade_ladder: [],
+        ranked_rooms: [],
+        fallback: null,
+      },
+    });
+    mockedAnswerConciergeQuestion.mockResolvedValue({
+      answer: "Breakfast is served from 7 to 10 AM.",
+      confidence: null,
+      sources: [],
+      answerType: "fact",
+    });
+
+    renderDashboard();
+
+    expect(await screen.findByText("Ask about the property, amenities, parking, policies, or nearby recommendations.")).toBeTruthy();
     expect(screen.getByText("Cavallo Point")).toBeTruthy();
+
+    await user.type(screen.getByPlaceholderText("Ask about your room, dates, parking, breakfast, or the property..."), "When is breakfast?");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(mockedAnswerConciergeQuestion).toHaveBeenCalledWith("cavallo_point", "When is breakfast?");
 
     await user.type(screen.getByLabelText("Check-in"), "2026-03-10");
     await user.type(screen.getByLabelText("Check-out"), "2026-03-12");
@@ -286,12 +288,7 @@ describe("DemoCheckoutDashboard", () => {
 
     renderDashboard();
 
-    await waitFor(() => {
-      expect(mockedCreateChatSession).toHaveBeenCalledWith(
-        expect.objectContaining({ property_id: "inn_at_mount_shasta" }),
-      );
-    });
-
+    await screen.findByText("Ask about the property, amenities, parking, policies, or nearby recommendations.");
     expect(screen.getByText("Inn At Mount Shasta")).toBeTruthy();
   });
 });

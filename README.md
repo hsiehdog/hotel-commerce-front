@@ -1,12 +1,15 @@
 # Hotel CommerceCo Frontend
 
-Next.js 16 frontend for hotel commerce demos and a small authenticated operator area. The app currently centers on three demo surfaces:
+Next.js 16 frontend for hotel commerce demos plus a small authenticated operator area.
 
-- `/demo/offers`: run `POST /offers/generate` and inspect the parsed decision output
-- `/demo/offers/logs`: browse historical offer decisions and inspect normalized detail payloads
-- `/demo/chat`: test a property-scoped chat booking flow with room recommendations
+The app currently has four primary demo surfaces:
 
-The root route redirects to `/demo/offers`. Authenticated pages still exist under `/dashboard`, `/settings`, `/login`, and `/signup`.
+- `/demo`: checkout-style concierge and offer flow
+- `/demo/offers`: raw offer generation and parsed decision inspection
+- `/demo/offers/logs`: historical offer decisions with normalized detail payloads
+- `/demo/chat`: property-scoped concierge Q&A
+
+The root route redirects to `/demo`. Authenticated pages remain available at `/dashboard`, `/settings`, `/login`, and `/signup`.
 
 ## Stack
 
@@ -23,6 +26,7 @@ The root route redirects to `/demo/offers`. Authenticated pages still exist unde
 
 ```bash
 pnpm install
+cp .env.example .env.local
 pnpm dev
 ```
 
@@ -42,56 +46,57 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ## Environment
 
-No environment variables are required to boot the UI, but remote backend integration depends on them.
+The UI can boot without a backend, but remote integration depends on the public env vars below.
 
 | Variable | Required | Notes |
 | --- | --- | --- |
-| `NEXT_PUBLIC_API_BASE_URL` | No | Base URL for backend APIs. When unset, `src/lib/api-client.ts` runs in mock mode for dashboard metrics, property lists, dashboard chat, and demo chat session/message APIs. |
-| `NEXT_PUBLIC_AUTH_BASE_URL` | No | Preferred Better Auth backend origin. Falls back to `NEXT_PUBLIC_API_BASE_URL`, then `NEXT_PUBLIC_APP_URL`. |
-| `NEXT_PUBLIC_AUTH_BASE_PATH` | No | Better Auth route path. Defaults to `/api/auth`. |
-| `NEXT_PUBLIC_APP_URL` | No | Frontend origin fallback used by the auth client when no auth or API base URL is set. |
+| `NEXT_PUBLIC_APP_URL` | No | Frontend origin, typically `http://localhost:3000`. |
+| `NEXT_PUBLIC_AUTH_BASE_URL` | No | Better Auth backend origin. Falls back to `NEXT_PUBLIC_API_BASE_URL`, then `NEXT_PUBLIC_APP_URL`. |
+| `NEXT_PUBLIC_AUTH_BASE_PATH` | No | Better Auth route path. `.env.example` uses `/auth`. If unset in code, the client falls back to `/api/auth`. |
+| `NEXT_PUBLIC_API_BASE_URL` | No | Base URL for backend APIs. When unset, parts of `src/lib/api-client.ts` switch to mock mode. |
 
 ## Runtime Behavior
 
-### Demo navigation
+### Shared shell navigation
 
-The shared shell header links only to the three demo routes:
+The header links to:
 
+- `/demo`
 - `/demo/offers`
 - `/demo/offers/logs`
 - `/demo/chat`
 
 ### Authenticated requests
 
-- `src/lib/auth/client.ts` creates the Better Auth client with `credentials: "include"`.
-- `src/lib/api-client.ts` also sends backend requests with `credentials: "include"`.
-- `/dashboard` and `/settings` are wrapped in `ProtectedRoute`, which redirects unauthenticated users to `/login`.
+- [src/lib/auth/client.ts](/Users/mikehsieh/Builds/hotel-commerce/front/src/lib/auth/client.ts) creates the Better Auth client with `credentials: "include"`.
+- [src/lib/api-client.ts](/Users/mikehsieh/Builds/hotel-commerce/front/src/lib/api-client.ts) also sends backend requests with `credentials: "include"`.
+- `/dashboard` and `/settings` are wrapped in `ProtectedRoute` and redirect unauthenticated users to `/login`.
 
 ### Mock mode
 
 If `NEXT_PUBLIC_API_BASE_URL` is not set:
 
-- `/dashboard` uses mocked usage, project, activity, and simple AI chat data
-- `/demo/chat` uses mocked session creation and mocked assistant responses
+- `/dashboard` uses mocked usage, project, activity, session, and simple AI chat data
+- `/demo/chat` uses mocked concierge answers
 - `/demo/offers/logs` can still load a mocked property list
-- `/demo/offers/logs/:detail` behavior is not mocked; detail fetches fail in mock mode
+- `/demo/offers/logs/:decisionId` detail fetches are not mocked and will fail without a backend
 
 Important exception:
 
-- `/demo/offers` does not use `src/lib/api-client.ts`
-- it still sends `fetch` requests directly to `${NEXT_PUBLIC_API_BASE_URL}/offers/generate`
-- if no base URL is configured, it falls back to `/offers/generate` on the current origin
-- its property dropdown does use `GET /properties` through the shared offer property hook
+- [src/lib/offers-demo.ts](/Users/mikehsieh/Builds/hotel-commerce/front/src/lib/offers-demo.ts) calls `POST /offers/generate` directly
+- it uses `${NEXT_PUBLIC_API_BASE_URL}/offers/generate` when a base URL exists
+- otherwise it falls back to `/offers/generate` on the current origin
 
 ## Routes
 
 | Route | Purpose |
 | --- | --- |
-| `/` | Redirects to `/demo/offers` |
-| `/demo/offers` | Offer decision dashboard |
+| `/` | Redirects to `/demo` |
+| `/demo` | Checkout-style concierge and offers demo |
+| `/demo/offers` | Offer generation dashboard |
 | `/demo/offers/logs` | Offer log list plus detail inspection |
-| `/demo/chat` | Property-scoped chat booking demo |
-| `/dashboard` | Protected operator dashboard with metrics, project list, activity, and chat panel |
+| `/demo/chat` | Property-scoped chat demo |
+| `/dashboard` | Protected operator dashboard with metrics, project list, activity, and AI chat panel |
 | `/settings` | Protected profile and password settings |
 | `/login` | Better Auth sign-in form |
 | `/signup` | Better Auth sign-up form |
@@ -101,11 +106,11 @@ Important exception:
 
 ### Offer generation
 
-`src/lib/offers-demo.ts` builds the request for:
+[src/lib/offers-demo.ts](/Users/mikehsieh/Builds/hotel-commerce/front/src/lib/offers-demo.ts) builds the request for:
 
 - `POST /offers/generate`
 
-The request shape is centered on:
+The request is centered on:
 
 - `property_id`
 - `channel`
@@ -119,7 +124,7 @@ The request shape is centered on:
 - `roomOccupancies`
 - `debug`
 
-The parser accepts mixed camelCase or snake_case response payloads and expects data such as:
+The parser accepts mixed camelCase and snake_case fields, including:
 
 - `propertyId` or `property_id`
 - `priceBasisUsed` or `price_basis_used`
@@ -132,7 +137,7 @@ The parser accepts mixed camelCase or snake_case response payloads and expects d
 
 ### Offer logs
 
-`src/lib/api-client.ts` currently calls:
+[src/lib/api-client.ts](/Users/mikehsieh/Builds/hotel-commerce/front/src/lib/api-client.ts) currently calls:
 
 - `GET /properties`
 - `GET /offers/logs`
@@ -140,66 +145,57 @@ The parser accepts mixed camelCase or snake_case response payloads and expects d
 
 Current UI behavior:
 
-- both `/demo/offers` and `/demo/offers/logs` load property options from `GET /properties`
-- the dropdown keeps backend order and appends `Demo Property` as the final option
-- both screens default to the first backend property when one exists, otherwise `Demo Property`
-- the logs screen filters by the currently selected property in local component state
-- list queries use an all-time range with pagination via `cursor`
+- `/demo`, `/demo/offers`, `/demo/offers/logs`, and `/demo/chat` all rely on property selection
+- shared property helpers append `Demo Property` as the final fallback option
+- offer log list queries use pagination via `cursor`
 - detail fetches request `includeRawPayloads=true` and `payloadCapKb=512`
-- the detail screen maps log payloads back into the same decision panels used by `/demo/offers`
+- log detail is mapped back into the same offer decision panels used by `/demo/offers`
 
-### Chat demo
+### Concierge endpoints
 
-`/demo/chat` depends on:
+The concierge demos depend on:
 
-- `POST /chat/sessions`
-- `POST /chat/sessions/:sessionId/messages`
 - `GET /properties`
+- `POST /properties/:propertyId/concierge/answer`
 
-The frontend uses response fields like:
+The frontend consumes fields such as:
 
-- `data.sessionId`
-- `data.assistantMessage`
-- `data.status`
-- `data.nextAction`
-- `data.pendingAction`
-- `data.slots`
-- `data.responseUi`
-- `data.commerce`
-- `data.decisionId`
-- `data.debug`
-
-The chat UI stores the active demo session and retry buffer in `sessionStorage`, scoped by property.
+- `data.answer`
+- `data.confidence`
+- `data.sources`
+- `data.answer_type`
 
 ### Authenticated dashboard and settings
 
 When `NEXT_PUBLIC_API_BASE_URL` is configured:
 
 - `/dashboard` calls `GET /analytics/usage`, `GET /projects`, `GET /activity`, `GET /users/me/sessions`, and `POST /ai/generate`
-- `/settings` uses profile endpoints exposed through `updateUserProfile` and `changeUserPassword`
+- `/settings` updates profile and password through `updateUserProfile` and `changeUserPassword`
 
 ## Feature Notes
+
+### `/demo`
+
+- combines a checkout-style booking form, concierge thread, and offer presentation
+- shares property scope across offer generation and concierge requests
+- supports restarting the concierge locally without a page reload
 
 ### `/demo/offers`
 
 - preset scenarios populate request drafts for several traveler patterns
-- property options come from `GET /properties`, with `Demo Property` appended as a fallback/demo entry
 - advanced JSON overrides merge into the request payload
-- the response is normalized into reusable panels such as decision summary, guest profile, candidate analysis, and debug output
-- upgrade ladder cards summarize each option with total price, nightly delta, and upgrade rationale
+- responses are normalized into reusable decision panels
 
 ### `/demo/offers/logs`
 
-- property options come from `GET /properties`, with `Demo Property` appended as the final option
-- the list view is table-first and keeps property selection in local state
-- opening a decision prefetches detail data
-- detail rendering falls back gracefully when only partial log data is available
-- `selectedDecisionId` still initializes from URL search params when present
+- table-first log view with local property filtering
+- opening a decision loads detailed normalized payloads
+- detail rendering degrades gracefully when only partial payload data is available
 
 ### `/demo/chat`
 
-- property changes reset the session and URL state
-- validation, expiry, retry, and rate-limit states are handled in the UI
+- property changes reset local session state and URL state
+- validation, retry, expiry, and rate-limit states are handled in the UI
 - room recommendation rendering prefers `commerce.recommended_room` and falls back to ranked rooms
 
 ## Project Structure
@@ -209,19 +205,20 @@ When `NEXT_PUBLIC_API_BASE_URL` is configured:
 | `src/app` | App Router routes |
 | `src/components/auth` | Auth form and route guard |
 | `src/components/chat` | Chat demo UI and message rendering |
+| `src/components/checkout` | Checkout-style demo flow |
 | `src/components/dashboard` | Protected dashboard cards and activity feed |
 | `src/components/layout` | Shared shell and header |
 | `src/components/offers` | Offer generator, logs dashboard, and decision panels |
 | `src/components/ui` | shadcn/ui primitives |
 | `src/hooks` | React Query hooks |
 | `src/lib/api-client.ts` | Backend client, normalization, and mocks |
-| `src/lib/demo-properties.ts` | Shared demo property option helpers |
+| `src/lib/demo-properties.ts` | Shared property-option helpers |
 | `src/lib/offers-demo.ts` | Offer request builder, presets, validation, and response parsing |
 | `src/test/setup.js` | Vitest setup |
 
 ## Verification
 
-After changes, run:
+After code changes, run:
 
 ```bash
 pnpm lint

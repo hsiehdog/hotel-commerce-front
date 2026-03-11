@@ -6,7 +6,6 @@ import { fetchProperties } from "@/lib/api-client";
 import {
   buildOfferPropertyOptions,
   DEMO_PROPERTY_ID,
-  getDefaultOfferPropertyId,
 } from "@/lib/demo-properties";
 
 type UseOfferPropertyOptionsResult = {
@@ -22,19 +21,27 @@ export function useOfferPropertyOptions(queryKey: string): UseOfferPropertyOptio
     queryFn: () => fetchProperties({ activeOnly: true }),
   });
 
-  const propertyOptions = useMemo(
-    () => (propertiesQuery.isPending ? [] : buildOfferPropertyOptions(propertiesQuery.data ?? [])),
-    [propertiesQuery.data, propertiesQuery.isPending],
-  );
-
-  const defaultPropertyId = useMemo(() => {
+  const { propertyOptions, defaultPropertyId } = useMemo(() => {
     if (propertiesQuery.isPending) {
-      return "";
+      return {
+        propertyOptions: [],
+        defaultPropertyId: "",
+      };
     }
+
     if (propertiesQuery.isError) {
-      return DEMO_PROPERTY_ID;
+      return {
+        propertyOptions: [],
+        defaultPropertyId: DEMO_PROPERTY_ID,
+      };
     }
-    return getDefaultOfferPropertyId(propertiesQuery.data ?? []);
+
+    const options = buildOfferPropertyOptions(propertiesQuery.data ?? []);
+
+    return {
+      propertyOptions: options,
+      defaultPropertyId: options[0]?.propertyId ?? DEMO_PROPERTY_ID,
+    };
   }, [propertiesQuery.data, propertiesQuery.isError, propertiesQuery.isPending]);
 
   return {

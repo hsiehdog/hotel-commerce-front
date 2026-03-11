@@ -4,12 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DemoChatDashboard } from "@/components/chat/demo-chat-dashboard";
-import {
-  ChatSession,
-  createChatSession,
-  fetchProperties,
-  sendChatSessionMessage,
-} from "@/lib/api-client";
+import { ApiClientRequestError, answerConciergeQuestion, fetchProperties } from "@/lib/api-client";
 
 const replaceMock = vi.fn();
 
@@ -28,26 +23,12 @@ vi.mock("@/lib/api-client", async () => {
   return {
     ...actual,
     fetchProperties: vi.fn(),
-    createChatSession: vi.fn(),
-    sendChatSessionMessage: vi.fn(),
+    answerConciergeQuestion: vi.fn(),
   };
 });
 
 const mockedFetchProperties = vi.mocked(fetchProperties);
-const mockedCreateChatSession = vi.mocked(createChatSession);
-const mockedSendChatSessionMessage = vi.mocked(sendChatSessionMessage);
-
-function buildSession(overrides: Partial<ChatSession> = {}): ChatSession {
-  return {
-    sessionId: "session-1",
-    createdAt: "2026-03-01T00:00:00.000Z",
-    expiresAt: "2099-03-01T01:00:00.000Z",
-    propertyId: "demo_property",
-    language: "en-US",
-    greeting: "Hello from backend",
-    ...overrides,
-  };
-}
+const mockedAnswerConciergeQuestion = vi.mocked(answerConciergeQuestion);
 
 function renderDashboard() {
   const queryClient = new QueryClient({
@@ -70,346 +51,124 @@ describe("DemoChatDashboard", () => {
     sessionStorage.clear();
     replaceMock.mockReset();
     mockedFetchProperties.mockReset();
-    mockedCreateChatSession.mockReset();
-    mockedSendChatSessionMessage.mockReset();
+    mockedAnswerConciergeQuestion.mockReset();
 
     mockedFetchProperties.mockResolvedValue([
       { propertyId: "demo_hotel_sf", name: "Demo Hotel San Francisco" },
     ]);
-    mockedCreateChatSession.mockResolvedValue(buildSession());
   });
 
-  it("creates a session and renders greeting", async () => {
+  it("renders a local concierge greeting without creating a backend session", async () => {
     renderDashboard();
 
-    await waitFor(() => {
-      expect(mockedCreateChatSession).toHaveBeenCalledTimes(1);
-    });
-
-    expect(await screen.findByText("Hello from backend")).toBeTruthy();
+    expect(await screen.findByText("Ask me anything about this property, including amenities, policies, parking, or dining.")).toBeTruthy();
+    expect(mockedAnswerConciergeQuestion).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Start new chat" })).toBeTruthy();
   });
 
-  it("renders single recommended room from new commerce payload", async () => {
+  it("sends the selected property and renders answer metadata", async () => {
     const user = userEvent.setup();
-    mockedSendChatSessionMessage.mockResolvedValue({
-      sessionId: "session-1",
-      assistantMessage: "I found a recommendation",
-      status: "OK",
-      nextAction: "PRESENT_OFFERS",
-      slots: {},
-      responseUi: {
-        type: "offer_recommendation",
-        showRecommendedRoom: true,
-        showRecommendedOffers: false,
-        showRankedRooms: false,
-      },
-      commerce: {
-        currency: "USD",
-        recommended_room: {
-          room_type: "Family Suite",
-          rate_plan: "Flexible Rate",
-          nightly_price: 329,
-          total_price: 987,
-          score: 0.8731,
-          reasons: ["Strong fit"],
-          policy_summary: "Refundable",
-          inventory_note: "Only 2 left",
-          room_type_id: "rt_family_suite",
-          rate_plan_id: "rp_flex",
-        },
-      },
-      decisionId: "decision-1",
+    mockedAnswerConciergeQuestion.mockResolvedValue({
+      answer: "Yes, the pool is heated year-round.",
+      confidence: 0.92,
+      sources: [{ id: "pool", title: "Amenities fact sheet", url: "https://example.com/amenities" }],
+      answerType: "fact",
     });
 
     renderDashboard();
 
-    await screen.findByText("Hello from backend");
-    await user.type(screen.getByPlaceholderText("Type your request..."), "Show recommendation");
+    await screen.findByText("Ask me anything about this property, including amenities, policies, parking, or dining.");
+    await user.type(screen.getByPlaceholderText("Type your request..."), "Is the pool heated?");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
-    expect(await screen.findByText("Recommended Room")).toBeTruthy();
-    expect(screen.getByText("Family Suite | Flexible Rate")).toBeTruthy();
-    expect(screen.getByText("$987")).toBeTruthy();
-    expect(screen.getByText("I found a recommendation")).toBeTruthy();
+    expect(mockedAnswerConciergeQuestion).toHaveBeenCalledWith("demo_property", "Is the pool heated?");
+    expect(await screen.findByText("Yes, the pool is heated year-round.")).toBeTruthy();
+    expect(screen.getByText("fact")).toBeTruthy();
+    expect(screen.getByText("Confidence 92%")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Amenities fact sheet" }).getAttribute("href")).toBe("https://example.com/amenities");
   });
 
-  it("renders question UI without slot hint badges", async () => {
+  it("renders source links from alternate backend URL keys", async () => {
     const user = userEvent.setup();
-    mockedSendChatSessionMessage.mockResolvedValue({
-      sessionId: "session-1",
-      assistantMessage: "What dates are you looking for?",
-      status: "NEEDS_CLARIFICATION",
-      nextAction: "ASK_QUESTION",
-      slots: {},
-      responseUi: {
-        type: "question",
-        answerMode: "free_text",
-        targetSlots: ["check_in", "check_out"],
-        slotHints: {
-          missingRequired: ["check_in", "check_out"],
-          collected: ["adults"],
-        },
-      },
-      commerce: {
-        recommended_room: null,
-        recommended_offers: [],
-        ranked_rooms: [],
-        fallback: {
-          type: "suggest_alternate_dates",
-          reason: "No eligible room remained.",
-          suggestions: [],
-        },
-      },
+    mockedAnswerConciergeQuestion.mockResolvedValue({
+      answer: "The spa menu is available online.",
+      confidence: null,
+      sources: [{ title: "Spa menu", reference_url: "https://example.com/spa-menu" }],
+      answerType: "fact",
     });
 
     renderDashboard();
 
-    await screen.findByText("Hello from backend");
-    await user.type(screen.getByPlaceholderText("Type your request..."), "Show recommendation");
+    await screen.findByText("Ask me anything about this property, including amenities, policies, parking, or dining.");
+    await user.type(screen.getByPlaceholderText("Type your request..."), "Where is the spa menu?");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
-    expect(await screen.findByText("What dates are you looking for?")).toBeTruthy();
-    expect(screen.getByPlaceholderText("Type your response...")).toBeTruthy();
-    expect(screen.queryByText("Waiting for: Check In, Check Out")).toBeNull();
-    expect(screen.queryByText("Need Check In")).toBeNull();
-    expect(screen.queryByText("Need Check Out")).toBeNull();
-    expect(screen.queryByText("Have Adults")).toBeNull();
-    expect(screen.queryByText("Recommended Room")).toBeNull();
+    expect(await screen.findByRole("link", { name: "Spa menu" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Spa menu" }).getAttribute("href")).toBe("https://example.com/spa-menu");
   });
 
-  it("renders yes/no confirmation prompt without summary details", async () => {
+  it("switches property scope before sending", async () => {
     const user = userEvent.setup();
-    mockedSendChatSessionMessage.mockResolvedValue({
-      sessionId: "session-1",
-      assistantMessage: "Please confirm these stay details.",
-      status: "OK",
-      nextAction: "CONFIRM",
-      slots: {},
-      responseUi: {
-        type: "confirmation",
-        answerMode: "yes_no",
-        targetSlots: ["confirm_dates"],
-        summary: {
-          check_in: "2026-06-10",
-          check_out: "2026-06-12",
-          adults: 2,
-        },
-      },
-      commerce: {},
+    mockedAnswerConciergeQuestion.mockResolvedValue({
+      answer: "Parking is valet only.",
+      confidence: null,
+      sources: [],
+      answerType: "policy",
     });
 
     renderDashboard();
 
-    await screen.findByText("Hello from backend");
-    await user.type(screen.getByPlaceholderText("Type your request..."), "Continue");
+    await screen.findByRole("option", { name: "Demo Hotel San Francisco" });
+    await user.selectOptions(screen.getByRole("combobox"), "demo_hotel_sf");
+    await user.type(screen.getByPlaceholderText("Type your request..."), "What parking is available?");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
-    expect(await screen.findByText("Please confirm these stay details.")).toBeTruthy();
-    expect(screen.queryByText("Review details")).toBeNull();
-    expect(screen.queryByText("Check In")).toBeNull();
-    expect(screen.queryByText("2026-06-10")).toBeNull();
-    expect(screen.queryByText("Check Out")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Yes" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "No" })).toBeNull();
-    expect(screen.getByPlaceholderText("Type your response...")).toBeTruthy();
+    expect(mockedAnswerConciergeQuestion).toHaveBeenCalledWith("demo_hotel_sf", "What parking is available?");
   });
 
-  it("renders confirm_offer_recap details in a recap table", async () => {
+  it("retries the same question after a request failure", async () => {
     const user = userEvent.setup();
-    mockedSendChatSessionMessage.mockResolvedValue({
-      sessionId: "session-1",
-      assistantMessage:
-        "Just to confirm, here are the details I have: check-in Friday, April 3, 2026, check-out Sunday, April 5, 2026, nights 2, adults 2, rooms 1, children 0. Is this correct?",
-      status: "OK",
-      nextAction: "CONFIRM",
-      pendingAction: {
-        type: "confirm_offer_recap",
-        answerMode: "yes_no",
-        source: "offer_engine",
-        targetSlots: ["offer_recap_confirmation"],
-        proposedPatch: {
-          room_type_name: "Family Suite",
-          rate_plan_name: "Flexible Rate",
-          total_price: 987,
-          currency: "USD",
-          check_in: "2026-06-10",
-          check_out: "2026-06-12",
-        },
-      },
-      slots: {},
-      responseUi: {
-        type: "confirmation",
-        answerMode: "yes_no",
-        targetSlots: ["offer_recap_confirmation"],
-        summary: {
-          adults: 2,
-          children: 1,
-        },
-      },
-      commerce: {},
-    });
-
-    renderDashboard();
-
-    await screen.findByText("Hello from backend");
-    await user.type(screen.getByPlaceholderText("Type your request..."), "Show me the offer");
-    await user.click(screen.getByRole("button", { name: "Send" }));
-
-    expect(await screen.findByText("Just to confirm, here are the details I have: Is this correct?")).toBeTruthy();
-    expect(screen.queryByText(/check-out Sunday, April 5, 2026/)).toBeNull();
-    expect(screen.getByText("Room Type Name")).toBeTruthy();
-    expect(screen.getByText("Family Suite")).toBeTruthy();
-    expect(screen.getByText("Rate Plan Name")).toBeTruthy();
-    expect(screen.getByText("Flexible Rate")).toBeTruthy();
-    expect(screen.getByText("Total Price")).toBeTruthy();
-    expect(screen.getByText("987")).toBeTruthy();
-    expect(screen.getByText("Adults")).toBeTruthy();
-    expect(screen.getByText("2")).toBeTruthy();
-    expect(screen.getByText("Children")).toBeTruthy();
-    expect(screen.getByText("1")).toBeTruthy();
-  });
-
-  it("sends yes/no replies only when responseUi answerMode expects them", async () => {
-    const user = userEvent.setup();
-    mockedSendChatSessionMessage
+    mockedAnswerConciergeQuestion
+      .mockRejectedValueOnce(new Error("network"))
       .mockResolvedValueOnce({
-        sessionId: "session-1",
-        assistantMessage: "Will any children be traveling with you?",
-        status: "NEEDS_CLARIFICATION",
-        nextAction: "ASK_QUESTION",
-        slots: {},
-        responseUi: {
-          type: "question",
-          answerMode: "yes_no",
-          targetSlots: ["children_presence"],
-        },
-        commerce: {},
-      })
-      .mockResolvedValueOnce({
-        sessionId: "session-1",
-        assistantMessage: "Confirmed. I will keep those dates.",
-        status: "OK",
-        nextAction: "ASK_QUESTION",
-        slots: {},
-        responseUi: {
-          type: "question",
-          answerMode: "free_text",
-          targetSlots: ["children_count"],
-        },
-        commerce: {},
+        answer: "Breakfast starts at 7 AM.",
+        confidence: 0.81,
+        sources: [],
+        answerType: "fact",
       });
 
     renderDashboard();
 
-    await screen.findByText("Hello from backend");
-    await user.type(screen.getByPlaceholderText("Type your request..."), "Next weekend");
+    await screen.findByText("Ask me anything about this property, including amenities, policies, parking, or dining.");
+    await user.type(screen.getByPlaceholderText("Type your request..."), "When is breakfast?");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
-    await screen.findByText("Will any children be traveling with you?");
-    await user.type(screen.getByPlaceholderText("Type your response..."), "yes");
-    await user.click(screen.getByRole("button", { name: "Send" }));
+    expect(await screen.findByText("Network error. Retry with the same message.")).toBeTruthy();
+    await user.click(await screen.findByRole("button", { name: "Retry" }));
 
-    await screen.findByText("Confirmed. I will keep those dates.");
-    expect(mockedSendChatSessionMessage).toHaveBeenNthCalledWith(
-      2,
-      "session-1",
-      expect.objectContaining({ message: "yes" }),
+    expect(mockedAnswerConciergeQuestion).toHaveBeenCalledTimes(2);
+    expect(await screen.findByText("Breakfast starts at 7 AM.")).toBeTruthy();
+  });
+
+  it("shows a rate-limit banner from backend 429 errors", async () => {
+    const user = userEvent.setup();
+    mockedAnswerConciergeQuestion.mockRejectedValue(
+      new ApiClientRequestError({
+        status: 429,
+        message: "Too many requests",
+        retryAfterSeconds: 12,
+      }),
     );
-    expect(screen.getByPlaceholderText("Type your response...")).toBeTruthy();
-  });
-
-  it("renders retry action from error responseUi", async () => {
-    const user = userEvent.setup();
-    mockedSendChatSessionMessage
-      .mockResolvedValueOnce({
-        sessionId: "session-1",
-        assistantMessage: "Something went wrong. Try again.",
-        status: "ERROR",
-        nextAction: "ASK_QUESTION",
-        slots: {},
-        responseUi: {
-          type: "error",
-          retryable: true,
-        },
-        commerce: {},
-      })
-      .mockResolvedValueOnce({
-        sessionId: "session-1",
-        assistantMessage: "What dates are you looking for?",
-        status: "NEEDS_CLARIFICATION",
-        nextAction: "ASK_QUESTION",
-        slots: {},
-        responseUi: {
-          type: "question",
-          answerMode: "free_text",
-        },
-        commerce: {},
-      });
 
     renderDashboard();
 
-    await screen.findByText("Hello from backend");
-    await user.type(screen.getByPlaceholderText("Type your request..."), "Hello");
+    await screen.findByText("Ask me anything about this property, including amenities, policies, parking, or dining.");
+    await user.type(screen.getByPlaceholderText("Type your request..."), "Do you allow pets?");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
-    expect(await screen.findByText("Something went wrong. Try again.")).toBeTruthy();
-    await user.click(screen.getAllByRole("button", { name: "Retry" })[0]);
-    expect(await screen.findByText("What dates are you looking for?")).toBeTruthy();
-    expect(mockedSendChatSessionMessage).toHaveBeenCalledTimes(2);
-  });
-
-  it("uses typed input for single-choice turns instead of option buttons", async () => {
-    const user = userEvent.setup();
-    mockedSendChatSessionMessage
-      .mockResolvedValueOnce({
-        sessionId: "session-1",
-        assistantMessage: "Choose a room view.",
-        status: "NEEDS_CLARIFICATION",
-        nextAction: "ASK_QUESTION",
-        pendingAction: "select_room_view",
-        slots: {},
-        responseUi: {
-          type: "selection",
-          answerMode: "single_choice",
-          targetSlots: ["room_view"],
-          options: [
-            { label: "City View", value: "city_view" },
-            { label: "Ocean View", value: "ocean_view" },
-          ],
-        },
-        commerce: {},
-      })
-      .mockResolvedValueOnce({
-        sessionId: "session-1",
-        assistantMessage: "Ocean view noted.",
-        status: "OK",
-        nextAction: "ASK_QUESTION",
-        slots: {},
-        responseUi: {
-          type: "question",
-          answerMode: "free_text",
-        },
-        commerce: {},
-      });
-
-    renderDashboard();
-
-    await screen.findByText("Hello from backend");
-    await user.type(screen.getByPlaceholderText("Type your request..."), "Find a room");
-    await user.click(screen.getByRole("button", { name: "Send" }));
-
-    await screen.findByText("Choose a room view.");
-    expect(screen.queryByRole("button", { name: "City View" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Ocean View" })).toBeNull();
-    await user.type(screen.getByPlaceholderText("Type your response..."), "ocean_view");
-    await user.click(screen.getByRole("button", { name: "Send" }));
-
-    await screen.findByText("Ocean view noted.");
-    expect(mockedSendChatSessionMessage).toHaveBeenNthCalledWith(
-      2,
-      "session-1",
-      expect.objectContaining({ message: "ocean_view" }),
-    );
+    await waitFor(() => {
+      expect(screen.getByText("Rate limited. Try again in 12s.")).toBeTruthy();
+    });
+    expect(screen.getByText("Rate limited. You can send again in 12s.")).toBeTruthy();
   });
 });

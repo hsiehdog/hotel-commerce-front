@@ -1,5 +1,3 @@
-import type { RecommendedRoom } from "@/lib/offers-demo";
-
 type HttpMethod = "GET" | "POST" | "PATCH";
 
 export type ApiClientError = {
@@ -95,38 +93,23 @@ export type ChatResponseUi =
   | ChatResponseUiOfferRecommendation
   | ChatResponseUiError;
 
-export type ChatSession = {
-  sessionId: string;
-  createdAt: string;
-  expiresAt: string;
-  propertyId: string;
-  language: string | null;
-  greeting: string;
-};
+export type ConciergeAnswerType = "fact" | "policy" | "summary" | "fallback" | (string & {});
 
-export type ChatMessageRequest = {
-  message: string;
-  clientMessageId: string;
-  metadata?: { locale?: string; device?: string };
-};
-
-export type ChatCommerce = {
+export type ConciergeAnswerSource = {
+  id?: string;
+  label?: string;
+  title?: string;
+  kind?: string;
+  url?: string;
+  snippet?: string;
   [key: string]: unknown;
 };
 
-export type ChatMessageResponse = {
-  data: {
-    sessionId: string;
-    assistantMessage: string;
-    status: ChatMessageStatus;
-    nextAction: ChatNextAction;
-    pendingAction?: ChatPendingAction | null;
-    slots: Record<string, unknown>;
-    responseUi: ChatResponseUi;
-    commerce?: ChatCommerce;
-    decisionId?: string;
-    debug?: Record<string, unknown>;
-  };
+export type ConciergeAnswer = {
+  answer: string;
+  confidence: number | null;
+  sources: ConciergeAnswerSource[];
+  answerType: ConciergeAnswerType | null;
 };
 
 export type OffersLogDecisionStatus = "OK" | "NO_OFFERS" | "FALLBACK_ONLY" | "ERROR";
@@ -505,8 +488,6 @@ const mockOffersData = {
   ] satisfies PropertyListItem[],
 };
 
-let mockChatSessionCount = 0;
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -554,343 +535,6 @@ function parseAuditOutboxState(value: unknown): AuditOutboxState | null {
     return value;
   }
   return null;
-}
-
-function extractChatRecommendationSource(data: ChatMessageResponse["data"]): Record<string, unknown> | null {
-  const commerce = isRecord(data.commerce) ? data.commerce : {};
-  const commerceData = isRecord(commerce.data) ? commerce.data : commerce;
-  const responseData = isRecord((data as Record<string, unknown>).data)
-    ? ((data as Record<string, unknown>).data as Record<string, unknown>)
-    : {};
-
-  if (isRecord(commerceData.recommended_room) || Array.isArray(commerceData.ranked_rooms)) {
-    return commerceData;
-  }
-
-  if (isRecord(responseData.recommended_room) || Array.isArray(responseData.ranked_rooms)) {
-    return responseData;
-  }
-
-  return null;
-}
-
-function toRecommendedRoomPriceRows(value: unknown): Array<{ label: string; amount: number }> {
-  if (isRecord(value)) {
-    const groups = new Map<string, { total: number | null; perNight: number | null; flatFee: number | null }>();
-
-    for (const [key, rawValue] of Object.entries(value)) {
-      const numeric = firstNumber(rawValue);
-      if (numeric == null || numeric <= 0) {
-        continue;
-      }
-
-      if (key.endsWith("_total")) {
-        const base = key.slice(0, -"_total".length);
-        const current = groups.get(base) ?? { total: null, perNight: null, flatFee: null };
-        current.total = numeric;
-        groups.set(base, current);
-        continue;
-      }
-
-      if (key.endsWith("_per_night")) {
-        const base = key.slice(0, -"_per_night".length);
-        const current = groups.get(base) ?? { total: null, perNight: null, flatFee: null };
-        current.perNight = numeric;
-        groups.set(base, current);
-        continue;
-      }
-
-      if (key.endsWith("_flat_fee")) {
-        const base = `${key.slice(0, -"_flat_fee".length)}_fee`;
-        const current = groups.get(base) ?? { total: null, perNight: null, flatFee: null };
-        current.flatFee = numeric;
-        groups.set(base, current);
-        continue;
-      }
-
-      const current = groups.get(key) ?? { total: null, perNight: null, flatFee: null };
-      current.total = numeric;
-      groups.set(key, current);
-    }
-
-    return Array.from(groups.entries())
-      .map(([base, values]) => {
-        if (values.total === null || values.total <= 0) {
-          return null;
-        }
-
-        const suffix =
-          values.flatFee !== null && values.flatFee > 0
-            ? ""
-            : values.perNight !== null && values.perNight > 0
-              ? ` (${formatCompactCurrency(values.perNight)}/night)`
-              : "";
-
-        return {
-          label: `${toTitleLabel(base)}${suffix}`,
-          amount: values.total,
-        };
-      })
-      .filter((entry): entry is { label: string; amount: number } => entry !== null);
-  }
-
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value
-    .map((entry) => {
-      const row = isRecord(entry) ? entry : {};
-      const label = firstString(row.label, row.name, row.type);
-      const amount = firstNumber(row.amount, row.value, row.price);
-
-      if (!label || amount === null) {
-        return null;
-      }
-
-      return { label, amount };
-    })
-    .filter((entry): entry is { label: string; amount: number } => entry !== null);
-}
-
-function toTitleLabel(value: string): string {
-  return value
-    .replace(/_/g, " ")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
-    .join(" ");
-}
-
-function formatCompactCurrency(amount: number): string {
-  if (Number.isInteger(amount)) {
-    return `$${amount}`;
-  }
-  return `$${amount.toFixed(2)}`;
-}
-
-function normalizeRecommendedRoomForDisplay(raw: Record<string, unknown>): RecommendedRoom {
-  const pricingBreakdown = isRecord(raw.pricing_breakdown) ? raw.pricing_breakdown : {};
-
-  return {
-    roomType: firstString(raw.room_type, raw.room_type_name) ?? "Recommended room",
-    ratePlan: firstString(raw.rate_plan, raw.rate_plan_name) ?? "Rate plan",
-    nightlyPrice: firstNumber(raw.nightly_price) ?? null,
-    totalPrice: firstNumber(raw.total_price, raw.price) ?? null,
-    pricingBreakdown: {
-      subtotal: firstNumber(pricingBreakdown.subtotal, raw.subtotal) ?? null,
-      taxesAndFees: firstNumber(
-        pricingBreakdown.taxes_and_fees,
-        pricingBreakdown.taxesAndFees,
-        raw.taxes_and_fees,
-      ) ?? null,
-      includedFees: toRecommendedRoomPriceRows(
-        pricingBreakdown.included_fees ?? pricingBreakdown.includedFees ?? raw.fee_breakdown,
-      ),
-    },
-    score: firstNumber(raw.score) ?? null,
-    reasons: toStringArray(raw.reasons),
-    policySummary: firstString(raw.policy_summary, raw.cancellation_policy) ?? "-",
-    inventoryNote: firstString(raw.inventory_note) ?? "",
-    roomTypeId: firstString(raw.room_type_id) ?? "",
-    ratePlanId: firstString(raw.rate_plan_id) ?? "",
-  };
-}
-
-function normalizeRankedRoomForDisplay(raw: Record<string, unknown>): RecommendedRoom {
-  return {
-    roomType: firstString(raw.room_type_name, raw.room_type_id) ?? "Recommended room",
-    ratePlan: firstString(raw.rate_plan_name, raw.rate_plan_id) ?? "Rate plan",
-    nightlyPrice: firstNumber(raw.price) ?? null,
-    totalPrice: firstNumber(raw.price) ?? null,
-    pricingBreakdown: {
-      subtotal: firstNumber(raw.price) ?? null,
-      taxesAndFees: null,
-      includedFees: [],
-    },
-    score: firstNumber(raw.score) ?? null,
-    reasons: toStringArray(raw.reasons),
-    policySummary: firstString(raw.policy_summary, raw.cancellation_summary) ?? "Offer details available.",
-    inventoryNote: firstString(raw.inventory_note) ?? "",
-    roomTypeId: firstString(raw.room_type_id) ?? "",
-    ratePlanId: firstString(raw.rate_plan_id) ?? "",
-  };
-}
-
-export function getChatRecommendedRoomFromResponse(
-  data: ChatMessageResponse["data"],
-): RecommendedRoom | null {
-  const source = extractChatRecommendationSource(data);
-  if (!source) {
-    return null;
-  }
-
-  if (isRecord(source.recommended_room)) {
-    return normalizeRecommendedRoomForDisplay(source.recommended_room);
-  }
-
-  if (Array.isArray(source.ranked_rooms) && isRecord(source.ranked_rooms[0])) {
-    return normalizeRankedRoomForDisplay(source.ranked_rooms[0]);
-  }
-
-  return null;
-}
-
-function normalizeChatSlotHints(value: unknown): ChatResponseUiQuestion["slotHints"] | undefined {
-  const raw = isRecord(value) ? value : {};
-  const missingRequired = toStringArray(raw.missingRequired ?? raw.missing_required);
-  const collected = toStringArray(raw.collected);
-
-  if (missingRequired.length === 0 && collected.length === 0) {
-    return undefined;
-  }
-
-  return {
-    missingRequired,
-    collected,
-  };
-}
-
-function normalizeChatTargetSlots(value: unknown): string[] | undefined {
-  const targetSlots = toStringArray(value);
-  return targetSlots.length > 0 ? targetSlots : undefined;
-}
-
-function normalizeChatAnswerMode(value: unknown): ChatAnswerMode | null {
-  if (value === "yes_no" || value === "numeric" || value === "single_choice" || value === "free_text") {
-    return value;
-  }
-  return null;
-}
-
-function normalizeChatResponseOptions(value: unknown): ChatResponseUiOption[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value.flatMap((entry) => {
-    if (typeof entry === "string") {
-      const normalized = entry.trim();
-      return normalized ? [{ label: normalized, value: normalized }] : [];
-    }
-
-    if (!isRecord(entry)) {
-      return [];
-    }
-
-    const label = firstString(entry.label, entry.text, entry.name, entry.value);
-    const optionValue = firstString(entry.value, entry.id, entry.key, entry.label, entry.text);
-    if (!label || !optionValue) {
-      return [];
-    }
-
-    return [{
-      label,
-      value: optionValue,
-      description: firstString(entry.description, entry.helper) ?? null,
-    }];
-  });
-}
-
-function normalizeResponseUi(value: unknown): ChatResponseUi | null {
-  if (!isRecord(value) || typeof value.type !== "string") {
-    return null;
-  }
-
-  const answerMode =
-    normalizeChatAnswerMode(value.answerMode) ??
-    normalizeChatAnswerMode(value.input) ??
-    normalizeChatAnswerMode(value.variant);
-  const targetSlots = normalizeChatTargetSlots(value.targetSlots ?? value.target_slots);
-  const slotHints = normalizeChatSlotHints(value.slotHints);
-
-  if (value.type === "question") {
-    return {
-      type: "question",
-      answerMode: answerMode ?? "free_text",
-      targetSlots,
-      slotHints,
-    };
-  }
-
-  if (value.type === "confirmation") {
-    return {
-      type: "confirmation",
-      answerMode: answerMode ?? "yes_no",
-      targetSlots,
-      slotHints,
-      summary: isRecord(value.summary) ? value.summary : null,
-    };
-  }
-
-  if (value.type === "selection") {
-    return {
-      type: "selection",
-      answerMode: answerMode ?? "single_choice",
-      targetSlots,
-      slotHints,
-      options: normalizeChatResponseOptions(value.options),
-    };
-  }
-
-  if (value.type === "offer_recommendation") {
-    return {
-      type: "offer_recommendation",
-      showRecommendedRoom: Boolean(value.showRecommendedRoom),
-      showRecommendedOffers: Boolean(value.showRecommendedOffers),
-      showRankedRooms: Boolean(value.showRankedRooms),
-    };
-  }
-
-  if (value.type === "error") {
-    return {
-      type: "error",
-      retryable: Boolean(value.retryable),
-    };
-  }
-
-  return null;
-}
-
-export function getChatResponseUi(data: ChatMessageResponse["data"]): ChatResponseUi {
-  const explicit = normalizeResponseUi((data as Record<string, unknown>).responseUi);
-  if (explicit) {
-    return explicit;
-  }
-
-  if (data.status === "ERROR") {
-    return {
-      type: "error",
-      retryable: false,
-    };
-  }
-
-  if (getChatRecommendedRoomFromResponse(data)) {
-    return {
-      type: "offer_recommendation",
-      showRecommendedRoom: true,
-      showRecommendedOffers: false,
-      showRankedRooms: false,
-    };
-  }
-
-  if (data.nextAction === "CONFIRM") {
-    return {
-      type: "confirmation",
-      answerMode: "yes_no",
-      targetSlots: undefined,
-      slotHints: undefined,
-      summary: null,
-    };
-  }
-
-  return {
-    type: "question",
-    answerMode: "free_text",
-    targetSlots: undefined,
-    slotHints: undefined,
-  };
 }
 
 function buildQueryString(params: Record<string, string | number | boolean | undefined>) {
@@ -970,76 +614,49 @@ export async function sendChatMessage(message: string): Promise<ChatMessage> {
   return mapToChatMessage(response.data);
 }
 
-export async function createChatSession(input: {
-  property_id?: string;
-  timezone?: string;
-  language?: string;
-  clientConversationId?: string;
-}): Promise<ChatSession> {
-  if (isMock) {
-    await delay(240);
-    mockChatSessionCount += 1;
-    return {
-      sessionId: `mock-session-${mockChatSessionCount}`,
-      createdAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
-      propertyId: input.property_id ?? "demo_property",
-      language: input.language ?? null,
-      greeting: `Welcome to ${input.property_id ?? "demo_property"}. How can I help with your stay?`,
-    };
-  }
-
-  const response = await request<{ data: ChatSession }>("/chat/sessions", "POST", input);
-  return response.data;
-}
-
-export async function sendChatSessionMessage(
-  sessionId: string,
-  input: ChatMessageRequest,
-): Promise<ChatMessageResponse["data"]> {
+export async function answerConciergeQuestion(
+  propertyId: string,
+  question: string,
+): Promise<ConciergeAnswer> {
   if (isMock) {
     await delay(520);
     return {
-      sessionId,
-      assistantMessage:
-        "Thanks. I found one recommended room for your request.",
-      status: "OK",
-      nextAction: "PRESENT_OFFERS",
-      slots: {},
-      responseUi: {
-        type: "offer_recommendation",
-        showRecommendedRoom: true,
-        showRecommendedOffers: false,
-        showRankedRooms: false,
-      },
-      commerce: {
-        currency: "USD",
-        recommended_room: {
-          room_type: "Deluxe King",
-          rate_plan: "Flexible Rate",
-          nightly_price: 189,
-          total_price: 440,
-          score: 0.88,
-          reasons: ["Strong fit for party size", "Good relative value"],
-          policy_summary: "Refundable rate with flexible cancellation.",
-          inventory_note: "Only 2 left at this rate.",
-          room_type_id: "rt_deluxe_king",
-          rate_plan_id: "rp_flex",
+      answer: `Mocked concierge answer for ${propertyId}: ${question}`,
+      confidence: 0.92,
+      sources: [
+        {
+          id: "mock-source-1",
+          title: "Property fact sheet",
+          kind: "fact",
         },
-        recommended_offers: [],
-        ranked_rooms: [],
-        fallback: null,
-      },
-      decisionId: `mock-decision-${input.clientMessageId}`,
+      ],
+      answerType: "fact",
     };
   }
 
-  const response = await request<ChatMessageResponse>(
-    `/chat/sessions/${encodeURIComponent(sessionId)}/messages`,
+  const response = await request<{
+    data?: {
+      answer?: string;
+      confidence?: number | null;
+      sources?: unknown[];
+      answer_type?: string | null;
+      answerType?: string | null;
+    };
+  }>(
+    `/properties/${encodeURIComponent(propertyId)}/concierge/answer`,
     "POST",
-    input,
+    { question },
   );
-  return response.data;
+
+  const data = isRecord(response.data) ? response.data : {};
+  return {
+    answer: firstString(data.answer) ?? "",
+    confidence: firstNumber(data.confidence) ?? null,
+    sources: Array.isArray(data.sources)
+      ? data.sources.filter(isRecord).map((source) => ({ ...source }))
+      : [],
+    answerType: firstString(data.answerType, data.answer_type) ?? null,
+  };
 }
 
 export async function fetchProperties(
@@ -1319,4 +936,5 @@ export type UpdateUserPayload = {
 export type ChangePasswordPayload = {
   currentPassword: string;
   newPassword: string;
+  revokeOtherSessions?: boolean;
 };

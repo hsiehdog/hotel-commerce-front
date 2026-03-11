@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { RecommendedRoom } from "@/lib/offers-demo";
 import {
+  ConciergeAnswerSource,
   ChatNextAction,
   ChatPendingAction,
   ChatMessageStatus,
@@ -24,6 +25,9 @@ export type DemoChatMessageItem = {
   pendingAction?: ChatPendingAction | null;
   responseUi?: ChatResponseUi;
   recommendedRoom?: RecommendedRoom | null;
+  answerType?: string | null;
+  confidence?: number | null;
+  sources?: ConciergeAnswerSource[];
   decisionId?: string;
   isOptimistic?: boolean;
   isRetryable?: boolean;
@@ -58,6 +62,26 @@ type RecapRow = {
   label: string;
   value: string;
 };
+
+type ResolvedSourceLink = {
+  href: string;
+  label: string;
+};
+
+const SOURCE_URL_KEYS = [
+  "url",
+  "href",
+  "link",
+  "uri",
+  "sourceUrl",
+  "source_url",
+  "referenceUrl",
+  "reference_url",
+  "documentUrl",
+  "document_url",
+  "publicUrl",
+  "public_url",
+] as const;
 
 function toTitleCase(value: string): string {
   return value
@@ -149,6 +173,61 @@ function buildRecapRows(message: DemoChatMessageItem): RecapRow[] {
   return rows;
 }
 
+function isHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function extractSourceHref(value: unknown): string | null {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return isHttpUrl(trimmed) ? trimmed : null;
+  }
+
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  for (const key of SOURCE_URL_KEYS) {
+    const candidate = record[key];
+    if (typeof candidate === "string" && isHttpUrl(candidate.trim())) {
+      return candidate.trim();
+    }
+  }
+
+  for (const nestedValue of Object.values(record)) {
+    const nestedHref = extractSourceHref(nestedValue);
+    if (nestedHref) {
+      return nestedHref;
+    }
+  }
+
+  return null;
+}
+
+function resolveSourceLinks(sources: ConciergeAnswerSource[] | undefined): ResolvedSourceLink[] {
+  if (!sources) {
+    return [];
+  }
+
+  return sources.flatMap((source, index) => {
+    const href = extractSourceHref(source) ?? "";
+    if (!href) {
+      return [];
+    }
+
+    const labelCandidates = [source.title, source.label, source.kind];
+    const label = labelCandidates.find((value) => typeof value === "string" && value.trim())?.trim() || `Source ${index + 1}`;
+    return [{ href, label }];
+  });
+}
+
 export function DemoChatMessage({
   message,
   onRetry,
@@ -166,6 +245,8 @@ export function DemoChatMessage({
   const showErrorActions = !isUser && responseUi?.type === "error";
   const displayText = getDisplayPromptText(message);
   const showAssistantSpeechBubble = !isUser && Boolean(displayText);
+  const sourceLinks = resolveSourceLinks(message.sources);
+  const hasSourceMetadata = !isUser && (sourceLinks.length > 0 || message.confidence != null || message.answerType);
 
   return (
     <div className={cn("flex w-full", isUser ? "justify-end" : "justify-start")}>
@@ -200,6 +281,26 @@ export function DemoChatMessage({
         {!isUser && showOfferCard ? (
           <div className="mt-3 overflow-hidden rounded-3xl border border-border/60 bg-muted/70 p-3">
             <ChatOffersList recommendedRoom={message.recommendedRoom ?? null} />
+          </div>
+        ) : null}
+
+        {!isUser && hasSourceMetadata ? (
+          <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
+            {message.answerType ? <Badge variant="outline">{message.answerType}</Badge> : null}
+            {message.confidence != null ? (
+              <Badge variant="outline">Confidence {Math.round(message.confidence * 100)}%</Badge>
+            ) : null}
+            {sourceLinks.map((source) => (
+              <a
+                key={`${source.href}-${source.label}`}
+                href={source.href}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center rounded-full border border-border bg-background px-2.5 py-1 font-medium text-foreground transition-colors hover:bg-muted"
+              >
+                {source.label}
+              </a>
+            ))}
           </div>
         ) : null}
 

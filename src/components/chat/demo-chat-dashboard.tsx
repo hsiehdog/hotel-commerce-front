@@ -3,44 +3,26 @@
 import { useQuery } from "@tanstack/react-query";
 import { Loader2, SendHorizontal } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import {
-  FormEvent,
-  KeyboardEvent,
-  useEffect,
-  useMemo,
-  useReducer,
-  useRef,
-  useState,
-} from "react";
+import { FormEvent, KeyboardEvent, useEffect, useMemo, useReducer, useRef, useState } from "react";
 
 import { DemoChatMessage, DemoChatMessageItem } from "@/components/chat/demo-chat-message";
-import { getDisplayPromptText } from "@/components/chat/chat-message-helpers";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  ApiClientRequestError,
-  ChatMessageRequest,
-  getChatResponseUi,
-  ChatSession,
-  createChatSession,
-  fetchProperties,
-  getChatRecommendedRoomFromResponse,
-  sendChatSessionMessage,
-} from "@/lib/api-client";
+import { ApiClientRequestError, answerConciergeQuestion, fetchProperties } from "@/lib/api-client";
 import { emitChatTelemetry } from "@/lib/chat-telemetry";
 
 const DEFAULT_PROPERTY_ID = "demo_property";
 const MAX_MESSAGE_LENGTH = 1_000;
 const RATE_LIMIT_FALLBACK_SECONDS = 30;
 const SEND_DEBOUNCE_MS = 500;
-const SESSION_STORAGE_KEY = "demo-chat-session";
 const RETRY_STORAGE_KEY = "demo-chat-retry";
 
 type RetryBuffer = {
-  sessionId: string;
-  payload: ChatMessageRequest;
+  propertyId: string;
+  question: string;
+  clientMessageId: string;
 };
 
 type SendOptions = {
@@ -49,19 +31,17 @@ type SendOptions = {
 };
 
 type NormalizedError = {
-  type: "validation" | "expired" | "rate_limit" | "server" | "network";
+  type: "validation" | "rate_limit" | "server" | "network";
   message: string;
   status?: number;
   requestId?: string | null;
 };
 
 type ChatUiFlags = {
-  sessionExpired: boolean;
   rateLimitedUntil?: string;
 };
 
 type DemoChatState = {
-  chatSession: ChatSession | null;
   messages: DemoChatMessageItem[];
   pendingRequest: boolean;
   lastError: NormalizedError | null;
@@ -71,25 +51,20 @@ type DemoChatState = {
 };
 
 type ChatAction =
-  | { type: "RESET_FOR_PROPERTY" }
-  | { type: "SESSION_READY"; session: ChatSession }
+  | { type: "RESET_FOR_PROPERTY"; greeting: DemoChatMessageItem }
   | { type: "SET_PENDING"; pending: boolean; clientMessageId?: string | null }
   | { type: "SET_ERROR"; error: NormalizedError | null }
   | { type: "SET_RETRY_BUFFER"; retryBuffer: RetryBuffer | null }
-  | { type: "SET_SESSION_EXPIRED"; expired: boolean }
   | { type: "SET_RATE_LIMIT"; until?: string }
   | { type: "APPEND_MESSAGE"; message: DemoChatMessageItem };
 
 const initialState: DemoChatState = {
-  chatSession: null,
   messages: [],
   pendingRequest: false,
   lastError: null,
   inFlightClientMessageId: null,
   retryBuffer: null,
-  uiFlags: {
-    sessionExpired: false,
-  },
+  uiFlags: {},
 };
 
 function reducer(state: DemoChatState, action: ChatAction): DemoChatState {
@@ -97,24 +72,7 @@ function reducer(state: DemoChatState, action: ChatAction): DemoChatState {
     case "RESET_FOR_PROPERTY":
       return {
         ...initialState,
-      };
-    case "SESSION_READY":
-      return {
-        ...state,
-        chatSession: action.session,
-        messages: [
-          {
-            id: `${action.session.sessionId}-greeting`,
-            role: "assistant",
-            text: action.session.greeting,
-            createdAt: action.session.createdAt,
-          },
-        ],
-        lastError: null,
-        uiFlags: {
-          ...state.uiFlags,
-          sessionExpired: false,
-        },
+        messages: [action.greeting],
       };
     case "SET_PENDING":
       return {
@@ -131,14 +89,6 @@ function reducer(state: DemoChatState, action: ChatAction): DemoChatState {
       return {
         ...state,
         retryBuffer: action.retryBuffer,
-      };
-    case "SET_SESSION_EXPIRED":
-      return {
-        ...state,
-        uiFlags: {
-          ...state.uiFlags,
-          sessionExpired: action.expired,
-        },
       };
     case "SET_RATE_LIMIT":
       return {
@@ -162,32 +112,11 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-function isSessionExpired(expiresAt?: string): boolean {
-  if (!expiresAt) {
-    return false;
+function createClientMessageId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
   }
-  return new Date(expiresAt).getTime() <= Date.now();
-}
-
-function parseStoredSession(propertyId: string): ChatSession | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  const raw = window.sessionStorage.getItem(SESSION_STORAGE_KEY);
-  if (!raw) {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as { propertyId: string; session: ChatSession };
-    if (parsed.propertyId !== propertyId || isSessionExpired(parsed.session.expiresAt)) {
-      return null;
-    }
-    return parsed.session;
-  } catch {
-    return null;
-  }
+  return `message-${Date.now()}`;
 }
 
 function parseStoredRetry(propertyId: string): RetryBuffer | null {
@@ -208,31 +137,13 @@ function parseStoredRetry(propertyId: string): RetryBuffer | null {
   }
 }
 
-function getDeviceType() {
-  if (typeof window === "undefined") {
-    return "unknown";
-  }
-  return window.innerWidth < 768 ? "mobile" : "desktop";
-}
-
-function getLatestPromptMessage(messages: DemoChatMessageItem[]): DemoChatMessageItem | null {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    if (message?.role === "assistant" && message.responseUi) {
-      return message;
-    }
-  }
-
-  return null;
-}
-
-function buildComposerPlaceholder(message?: DemoChatMessageItem | null): string {
-  const prompt = getDisplayPromptText(message).trim();
-  if (!prompt) {
-    return "Type your request...";
-  }
-
-  return "Type your response...";
+function buildGreetingMessage(propertyId: string): DemoChatMessageItem {
+  return {
+    id: `${propertyId}-greeting`,
+    role: "assistant",
+    text: "Ask me anything about this property, including amenities, policies, parking, or dining.",
+    createdAt: nowIso(),
+  };
 }
 
 export function DemoChatDashboard() {
@@ -245,7 +156,6 @@ export function DemoChatDashboard() {
   const [selectedPropertyId, setSelectedPropertyId] = useState(
     () => searchParams.get("propertyId") ?? DEFAULT_PROPERTY_ID,
   );
-  const [isSessionLoading, setIsSessionLoading] = useState(false);
   const endOfMessagesRef = useRef<HTMLDivElement>(null);
   const lastSendRef = useRef<number>(0);
 
@@ -273,19 +183,10 @@ export function DemoChatDashboard() {
   const isRateLimited = Boolean(
     state.uiFlags.rateLimitedUntil && new Date(state.uiFlags.rateLimitedUntil).getTime() > Date.now(),
   );
-  const activePromptMessage = useMemo(
-    () => getLatestPromptMessage(state.messages),
-    [state.messages],
-  );
   const rateLimitSeconds = state.uiFlags.rateLimitedUntil
     ? Math.max(0, Math.ceil((new Date(state.uiFlags.rateLimitedUntil).getTime() - Date.now()) / 1000))
     : 0;
-  const composerDisabled =
-    state.pendingRequest ||
-    isSessionLoading ||
-    !state.chatSession ||
-    state.uiFlags.sessionExpired ||
-    isRateLimited;
+  const composerDisabled = state.pendingRequest || isRateLimited;
 
   useEffect(() => {
     endOfMessagesRef.current?.scrollIntoView?.({ behavior: "smooth" });
@@ -301,81 +202,15 @@ export function DemoChatDashboard() {
   }, [pathname, router, searchParams, selectedPropertyId]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function ensureSession() {
-      dispatch({ type: "RESET_FOR_PROPERTY" });
-      setIsSessionLoading(true);
-
-      const storedSession = parseStoredSession(selectedPropertyId);
-      const storedRetry = parseStoredRetry(selectedPropertyId);
-
-      if (storedRetry) {
-        dispatch({ type: "SET_RETRY_BUFFER", retryBuffer: storedRetry });
-      }
-
-      if (storedSession && !cancelled) {
-        dispatch({ type: "SESSION_READY", session: storedSession });
-        setIsSessionLoading(false);
-        return;
-      }
-
-      try {
-        const created = await createChatSession({
-          property_id: selectedPropertyId,
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-          language: typeof navigator !== "undefined" ? navigator.language : "en-US",
-        });
-        if (cancelled) {
-          return;
-        }
-
-        dispatch({ type: "SESSION_READY", session: created });
-        emitChatTelemetry("chat_session_created", { sessionId: created.sessionId });
-      } catch (error) {
-        if (cancelled) {
-          return;
-        }
-
-        const message = error instanceof Error ? error.message : "Failed to create chat session.";
-        dispatch({
-          type: "SET_ERROR",
-          error: {
-            type: "server",
-            message,
-          },
-        });
-      } finally {
-        if (!cancelled) {
-          setIsSessionLoading(false);
-        }
-      }
+    dispatch({
+      type: "RESET_FOR_PROPERTY",
+      greeting: buildGreetingMessage(selectedPropertyId),
+    });
+    const storedRetry = parseStoredRetry(selectedPropertyId);
+    if (storedRetry) {
+      dispatch({ type: "SET_RETRY_BUFFER", retryBuffer: storedRetry });
     }
-
-    void ensureSession();
-
-    return () => {
-      cancelled = true;
-    };
   }, [selectedPropertyId]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    if (state.chatSession) {
-      window.sessionStorage.setItem(
-        SESSION_STORAGE_KEY,
-        JSON.stringify({
-          propertyId: selectedPropertyId,
-          session: state.chatSession,
-        }),
-      );
-    } else {
-      window.sessionStorage.removeItem(SESSION_STORAGE_KEY);
-    }
-  }, [selectedPropertyId, state.chatSession]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -395,29 +230,8 @@ export function DemoChatDashboard() {
     }
   }, [selectedPropertyId, state.retryBuffer]);
 
-  useEffect(() => {
-    if (!state.chatSession || !isSessionExpired(state.chatSession.expiresAt)) {
-      return;
-    }
-
-    if (!state.uiFlags.sessionExpired) {
-      dispatch({ type: "SET_SESSION_EXPIRED", expired: true });
-      emitChatTelemetry("chat_session_expired", { sessionId: state.chatSession.sessionId });
-    }
-  }, [state.chatSession, state.uiFlags.sessionExpired]);
-
   async function handleSend(payloadOverride?: RetryBuffer, options?: SendOptions) {
-    if (!state.chatSession || state.pendingRequest) {
-      return;
-    }
-
-    if (state.uiFlags.sessionExpired || isSessionExpired(state.chatSession.expiresAt)) {
-      dispatch({ type: "SET_SESSION_EXPIRED", expired: true });
-      emitChatTelemetry("chat_session_expired", { sessionId: state.chatSession.sessionId });
-      return;
-    }
-
-    if (isRateLimited) {
+    if (state.pendingRequest || isRateLimited) {
       return;
     }
 
@@ -443,27 +257,16 @@ export function DemoChatDashboard() {
 
     lastSendRef.current = Date.now();
 
-    const payload =
-      payloadOverride?.payload ??
-      ({
-        message: trimmed,
-        clientMessageId: crypto.randomUUID(),
-        metadata: {
-          locale: typeof navigator !== "undefined" ? navigator.language : "en-US",
-          device: getDeviceType(),
-        },
-      } satisfies ChatMessageRequest);
+    const payload = payloadOverride ?? {
+      propertyId: selectedPropertyId,
+      question: trimmed,
+      clientMessageId: createClientMessageId(),
+    };
 
     dispatch({ type: "SET_PENDING", pending: true, clientMessageId: payload.clientMessageId });
     dispatch({ type: "SET_ERROR", error: null });
     dispatch({ type: "SET_RATE_LIMIT" });
-    dispatch({
-      type: "SET_RETRY_BUFFER",
-      retryBuffer: {
-        sessionId: state.chatSession.sessionId,
-        payload,
-      },
-    });
+    dispatch({ type: "SET_RETRY_BUFFER", retryBuffer: payload });
 
     if (!payloadOverride) {
       dispatch({
@@ -471,19 +274,19 @@ export function DemoChatDashboard() {
         message: {
           id: payload.clientMessageId,
           role: "user",
-          text: payload.message,
+          text: payload.question,
           createdAt: nowIso(),
           isOptimistic: true,
         },
       });
       setComposerValue("");
       emitChatTelemetry("chat_message_sent", {
-        sessionId: state.chatSession.sessionId,
+        propertyId: payload.propertyId,
         clientMessageId: payload.clientMessageId,
       });
     } else {
       emitChatTelemetry("chat_message_retry", {
-        sessionId: state.chatSession.sessionId,
+        propertyId: payload.propertyId,
         clientMessageId: payload.clientMessageId,
       });
     }
@@ -491,64 +294,33 @@ export function DemoChatDashboard() {
     const startedAt = performance.now();
 
     try {
-      const response = await sendChatSessionMessage(state.chatSession.sessionId, payload);
+      const response = await answerConciergeQuestion(payload.propertyId, payload.question);
       const latencyMs = Math.round(performance.now() - startedAt);
-      const responseUi = getChatResponseUi(response);
-      const recommendedRoom = getChatRecommendedRoomFromResponse(response);
 
       dispatch({
         type: "APPEND_MESSAGE",
         message: {
           id: `${payload.clientMessageId}-assistant-${Date.now()}`,
           role: "assistant",
-          text: response.assistantMessage,
+          text: response.answer,
           createdAt: nowIso(),
-          status: response.status,
-          nextAction: response.nextAction,
-          pendingAction: response.pendingAction ?? null,
-          responseUi,
-          recommendedRoom,
-          decisionId: response.decisionId,
-          isRetryable: responseUi.type === "error" ? Boolean(responseUi.retryable) : false,
+          answerType: response.answerType,
+          confidence: response.confidence,
+          sources: response.sources,
         },
       });
 
+      dispatch({ type: "SET_RETRY_BUFFER", retryBuffer: null });
       emitChatTelemetry("chat_response_received", {
-        sessionId: response.sessionId,
+        propertyId: payload.propertyId,
         clientMessageId: payload.clientMessageId,
         latencyMs,
+        sourceCount: response.sources.length,
+        answerType: response.answerType,
       });
-
-      if (responseUi.type === "offer_recommendation" && recommendedRoom) {
-        emitChatTelemetry("chat_offers_presented", {
-          sessionId: response.sessionId,
-          clientMessageId: payload.clientMessageId,
-          latencyMs,
-        });
-      }
-
-      if (response.status !== "ERROR") {
-        dispatch({ type: "SET_RETRY_BUFFER", retryBuffer: null });
-      }
     } catch (error) {
       if (error instanceof ApiClientRequestError) {
-        if (error.status === 404) {
-          dispatch({ type: "SET_SESSION_EXPIRED", expired: true });
-          dispatch({
-            type: "SET_ERROR",
-            error: {
-              type: "expired",
-              message: "Session expired, start new chat.",
-              status: 404,
-              requestId: error.requestId,
-            },
-          });
-          emitChatTelemetry("chat_session_expired", {
-            sessionId: state.chatSession.sessionId,
-            clientMessageId: payload.clientMessageId,
-            httpStatus: 404,
-          });
-        } else if (error.status === 429) {
+        if (error.status === 429) {
           const cooldownSeconds = error.retryAfterSeconds ?? RATE_LIMIT_FALLBACK_SECONDS;
           const untilIso = new Date(Date.now() + cooldownSeconds * 1000).toISOString();
           dispatch({ type: "SET_RATE_LIMIT", until: untilIso });
@@ -561,11 +333,6 @@ export function DemoChatDashboard() {
               requestId: error.requestId,
             },
           });
-          emitChatTelemetry("chat_error_http", {
-            sessionId: state.chatSession.sessionId,
-            clientMessageId: payload.clientMessageId,
-            httpStatus: 429,
-          });
         } else if (error.status === 400) {
           dispatch({
             type: "SET_ERROR",
@@ -575,11 +342,6 @@ export function DemoChatDashboard() {
               status: 400,
               requestId: error.requestId,
             },
-          });
-          emitChatTelemetry("chat_error_http", {
-            sessionId: state.chatSession.sessionId,
-            clientMessageId: payload.clientMessageId,
-            httpStatus: 400,
           });
         } else {
           dispatch({
@@ -591,22 +353,23 @@ export function DemoChatDashboard() {
               requestId: error.requestId,
             },
           });
-          emitChatTelemetry("chat_error_http", {
-            sessionId: state.chatSession.sessionId,
-            clientMessageId: payload.clientMessageId,
-            httpStatus: error.status,
-          });
         }
+        emitChatTelemetry("chat_error_http", {
+          propertyId: payload.propertyId,
+          clientMessageId: payload.clientMessageId,
+          httpStatus: error.status,
+          requestId: error.requestId,
+        });
       } else {
         dispatch({
           type: "SET_ERROR",
           error: {
             type: "network",
-            message: "Network error. Retry with the same message id.",
+            message: "Network error. Retry with the same message.",
           },
         });
         emitChatTelemetry("chat_error_network", {
-          sessionId: state.chatSession.sessionId,
+          propertyId: payload.propertyId,
           clientMessageId: payload.clientMessageId,
         });
       }
@@ -637,37 +400,19 @@ export function DemoChatDashboard() {
     await handleSend(state.retryBuffer);
   }
 
-  async function handleRestart() {
+  function handleRestart() {
     if (typeof window !== "undefined") {
-      const shouldRestart = window.confirm("Start a new chat session? Current messages will be cleared.");
+      const shouldRestart = window.confirm("Start a new chat? Current messages will be cleared.");
       if (!shouldRestart) {
         return;
       }
     }
 
-    dispatch({ type: "RESET_FOR_PROPERTY" });
+    dispatch({
+      type: "RESET_FOR_PROPERTY",
+      greeting: buildGreetingMessage(selectedPropertyId),
+    });
     setComposerValue("");
-    setIsSessionLoading(true);
-
-    try {
-      const created = await createChatSession({
-        property_id: selectedPropertyId,
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        language: typeof navigator !== "undefined" ? navigator.language : "en-US",
-      });
-      dispatch({ type: "SESSION_READY", session: created });
-      emitChatTelemetry("chat_session_created", { sessionId: created.sessionId });
-    } catch (error) {
-      dispatch({
-        type: "SET_ERROR",
-        error: {
-          type: "server",
-          message: error instanceof Error ? error.message : "Failed to start new chat.",
-        },
-      });
-    } finally {
-      setIsSessionLoading(false);
-    }
   }
 
   return (
@@ -685,6 +430,7 @@ export function DemoChatDashboard() {
             id="chat-property"
             value={selectedPropertyId}
             onChange={(event) => setSelectedPropertyId(event.target.value)}
+            disabled={propertiesQuery.isLoading}
             className="block h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
           >
             {propertyOptions.map((property) => (
@@ -706,25 +452,30 @@ export function DemoChatDashboard() {
               variant="outline"
               className="rounded-full bg-white"
               onClick={handleRestart}
-              disabled={isSessionLoading || state.pendingRequest}
+              disabled={state.pendingRequest}
             >
               Start new chat
             </Button>
           </CardAction>
           <CardDescription>
-            Session: {state.chatSession?.sessionId ?? "Not ready"}
+            Concierge answers are scoped to the selected property and stored only in this browser session.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4 pt-5">
           {state.lastError ? (
             <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-              {state.lastError.message}
-            </div>
-          ) : null}
-
-          {state.uiFlags.sessionExpired ? (
-            <div className="rounded-md border border-amber-500/50 bg-amber-500/10 p-3 text-sm text-amber-900">
-              Session expired, start a new chat from the header button.
+              <div>{state.lastError.message}</div>
+              {state.retryBuffer ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="mt-3"
+                  onClick={() => void handleRetry()}
+                >
+                  Retry
+                </Button>
+              ) : null}
             </div>
           ) : null}
 
@@ -736,18 +487,6 @@ export function DemoChatDashboard() {
 
           <ScrollArea className="h-[56vh] min-h-[340px]">
             <div className="flex flex-col gap-6 px-3 py-2 sm:px-5">
-              {isSessionLoading ? (
-                <div className="flex justify-center py-10 text-muted-foreground">
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                </div>
-              ) : null}
-
-              {!isSessionLoading && state.messages.length === 0 ? (
-                <p className="py-10 text-center text-sm text-muted-foreground">
-                  Creating session...
-                </p>
-              ) : null}
-
               {state.messages.map((message) => (
                 <DemoChatMessage
                   key={message.id}
@@ -769,7 +508,7 @@ export function DemoChatDashboard() {
             className="rounded-[28px] border border-border/60 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.08)]"
           >
             <Textarea
-              placeholder={buildComposerPlaceholder(activePromptMessage)}
+              placeholder="Type your request..."
               value={composerValue}
               onChange={(event) => setComposerValue(event.target.value)}
               onKeyDown={(event) => void handleComposerKeyDown(event)}
@@ -778,25 +517,23 @@ export function DemoChatDashboard() {
               disabled={composerDisabled}
             />
             <div className="mt-3 flex items-end justify-end gap-3 border-t border-border/50 pt-3">
-              <div className="flex items-center gap-2">
-                <Button
-                  type="submit"
-                  className="rounded-full"
-                  disabled={composerDisabled}
-                >
-                  {state.pendingRequest ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Sending...
-                    </>
-                  ) : (
-                    <>
-                      Send
-                      <SendHorizontal className="ml-2 h-4 w-4" />
-                    </>
-                  )}
-                </Button>
-              </div>
+              <Button
+                type="submit"
+                className="rounded-full"
+                disabled={composerDisabled}
+              >
+                {state.pendingRequest ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    Send
+                    <SendHorizontal className="ml-2 h-4 w-4" />
+                  </>
+                )}
+              </Button>
             </div>
           </form>
         </CardContent>

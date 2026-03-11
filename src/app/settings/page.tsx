@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { AppShell } from "@/components/layout/app-shell";
@@ -17,40 +17,38 @@ import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth/client";
 import { changeUserPassword, updateUserProfile } from "@/lib/api-client";
 
+type SettingsFeedback = {
+  type: "success" | "error";
+  message: string;
+};
+
+function parseSettingsErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    try {
+      const parsed = JSON.parse(error.message);
+      const fieldError =
+        parsed?.errors?.fieldErrors?.name?.[0] ||
+        parsed?.errors?.fieldErrors?.currentPassword?.[0] ||
+        parsed?.errors?.fieldErrors?.newPassword?.[0];
+      return fieldError || parsed?.message || error.message;
+    } catch {
+      return error.message;
+    }
+  }
+
+  return "Unexpected error. Please try again.";
+}
+
 export default function SettingsPage() {
   const { data } = authClient.useSession();
   const fullName = data?.user?.name || "";
   const [nameInput, setNameInput] = useState(fullName);
-  const [profileFeedback, setProfileFeedback] = useState<{
-    type: "success" | "error";
-    message: string;
-  } | null>(null);
-  const [passwordFeedback, setPasswordFeedback] = useState<{
-    type: "success" | "error";
-    message: string;
-  } | null>(null);
+  const [profileFeedback, setProfileFeedback] = useState<SettingsFeedback | null>(null);
+  const [passwordFeedback, setPasswordFeedback] = useState<SettingsFeedback | null>(null);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [isProfilePending, startProfileTransition] = useTransition();
   const [isPasswordPending, startPasswordTransition] = useTransition();
-
-  const parseErrorMessage = useMemo(() => {
-    return (error: unknown) => {
-      if (error instanceof Error) {
-        try {
-          const parsed = JSON.parse(error.message);
-          const fieldError =
-            parsed?.errors?.fieldErrors?.name?.[0] ||
-            parsed?.errors?.fieldErrors?.currentPassword?.[0] ||
-            parsed?.errors?.fieldErrors?.newPassword?.[0];
-          return fieldError || parsed?.message || error.message;
-        } catch {
-          return error.message;
-        }
-      }
-      return "Unexpected error. Please try again.";
-    };
-  }, []);
 
   useEffect(() => {
     setNameInput(fullName);
@@ -70,7 +68,7 @@ export default function SettingsPage() {
       } catch (error) {
         setProfileFeedback({
           type: "error",
-          message: parseErrorMessage(error),
+          message: parseSettingsErrorMessage(error),
         });
       }
     });
@@ -85,6 +83,7 @@ export default function SettingsPage() {
         await changeUserPassword({
           currentPassword,
           newPassword,
+          revokeOtherSessions: true,
         });
         setPasswordFeedback({
           type: "success",
@@ -95,7 +94,7 @@ export default function SettingsPage() {
       } catch (error) {
         setPasswordFeedback({
           type: "error",
-          message: parseErrorMessage(error),
+          message: parseSettingsErrorMessage(error),
         });
       }
     });
