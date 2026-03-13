@@ -210,7 +210,9 @@ describe("DemoCheckoutDashboard", () => {
     await user.type(screen.getByPlaceholderText("Ask about your room, dates, parking, breakfast, or the property..."), "Do you have a quieter room?");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
-    expect(mockedAnswerConciergeQuestion).toHaveBeenCalledWith("inn_at_mount_shasta", "Do you have a quieter room?");
+    expect(mockedAnswerConciergeQuestion).toHaveBeenCalledWith("inn_at_mount_shasta", "Do you have a quieter room?", {
+      sessionId: undefined,
+    });
     expect(await screen.findByText("Yes. Quiet-side rooms are usually available on request.")).toBeTruthy();
     expect(screen.getByText("fact")).toBeTruthy();
     expect(screen.getByText("Confidence 88%")).toBeTruthy();
@@ -270,7 +272,9 @@ describe("DemoCheckoutDashboard", () => {
     await user.type(screen.getByPlaceholderText("Ask about your room, dates, parking, breakfast, or the property..."), "When is breakfast?");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
-    expect(mockedAnswerConciergeQuestion).toHaveBeenCalledWith("cavallo_point", "When is breakfast?");
+    expect(mockedAnswerConciergeQuestion).toHaveBeenCalledWith("cavallo_point", "When is breakfast?", {
+      sessionId: undefined,
+    });
 
     await user.type(screen.getByLabelText("Check-in"), "2026-03-10");
     await user.type(screen.getByLabelText("Check-out"), "2026-03-12");
@@ -290,5 +294,150 @@ describe("DemoCheckoutDashboard", () => {
 
     await screen.findByText("Ask about the property, amenities, parking, policies, or nearby recommendations.");
     expect(screen.getByText("Inn At Mount Shasta")).toBeTruthy();
+  });
+
+  it("continues a clarification follow-up with the returned session id", async () => {
+    const user = userEvent.setup();
+
+    mockedAnswerConciergeQuestion
+      .mockResolvedValueOnce({
+        answer: "Which dining venue do you mean: Farley or Sula?",
+        confidence: 0.35,
+        sources: [],
+        answerType: "clarification",
+        conversation: {
+          sessionId: "sess_checkout",
+          mode: "knowledge",
+          status: "needs_clarification",
+          missingFields: [],
+        },
+      })
+      .mockResolvedValueOnce({
+        answer: "Farley serves breakfast from 7 to 10 AM.",
+        confidence: 0.9,
+        sources: [],
+        answerType: "fact",
+        conversation: {
+          sessionId: "sess_checkout",
+          mode: "knowledge",
+          status: "answered",
+          missingFields: [],
+        },
+      });
+
+    renderDashboard();
+
+    await screen.findByText("Ask about the property, amenities, parking, policies, or nearby recommendations.");
+    await user.type(screen.getByPlaceholderText("Ask about your room, dates, parking, breakfast, or the property..."), "What are the restaurant hours?");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText("Which dining venue do you mean: Farley or Sula?");
+
+    await user.type(screen.getByPlaceholderText("Ask about your room, dates, parking, breakfast, or the property..."), "Farley");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(mockedAnswerConciergeQuestion).toHaveBeenNthCalledWith(
+      1,
+      "inn_at_mount_shasta",
+      "What are the restaurant hours?",
+      { sessionId: undefined },
+    );
+    expect(mockedAnswerConciergeQuestion).toHaveBeenNthCalledWith(2, "inn_at_mount_shasta", "Farley", {
+      sessionId: "sess_checkout",
+    });
+    expect(await screen.findByText("Farley serves breakfast from 7 to 10 AM.")).toBeTruthy();
+  });
+
+  it("clears the session after restarting the checkout concierge", async () => {
+    const user = userEvent.setup();
+
+    mockedAnswerConciergeQuestion
+      .mockResolvedValueOnce({
+        answer: "Which dining venue do you mean: Farley or Sula?",
+        confidence: 0.35,
+        sources: [],
+        answerType: "clarification",
+        conversation: {
+          sessionId: "sess_restart",
+          mode: "knowledge",
+          status: "needs_clarification",
+          missingFields: [],
+        },
+      })
+      .mockResolvedValueOnce({
+        answer: "Breakfast starts at 7 AM.",
+        confidence: null,
+        sources: [],
+        answerType: "fact",
+      });
+
+    renderDashboard();
+
+    await screen.findByText("Ask about the property, amenities, parking, policies, or nearby recommendations.");
+    await user.type(screen.getByPlaceholderText("Ask about your room, dates, parking, breakfast, or the property..."), "What are the restaurant hours?");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText("Which dining venue do you mean: Farley or Sula?");
+
+    await user.click(screen.getByRole("button", { name: "Start a new concierge chat" }));
+    await user.type(screen.getByPlaceholderText("Ask about your room, dates, parking, breakfast, or the property..."), "When is breakfast?");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(mockedAnswerConciergeQuestion).toHaveBeenNthCalledWith(
+      2,
+      "inn_at_mount_shasta",
+      "When is breakfast?",
+      { sessionId: undefined },
+    );
+  });
+
+  it("clears the cached session after a 409 response", async () => {
+    const user = userEvent.setup();
+
+    mockedAnswerConciergeQuestion
+      .mockResolvedValueOnce({
+        answer: "Which dining venue do you mean: Farley or Sula?",
+        confidence: 0.35,
+        sources: [],
+        answerType: "clarification",
+        conversation: {
+          sessionId: "sess_conflict",
+          mode: "knowledge",
+          status: "needs_clarification",
+          missingFields: [],
+        },
+      })
+      .mockRejectedValueOnce(
+        new apiClient.ApiClientRequestError({
+          status: 409,
+          message: "Session belongs to a different property.",
+        }),
+      )
+      .mockResolvedValueOnce({
+        answer: "Breakfast starts at 7 AM.",
+        confidence: null,
+        sources: [],
+        answerType: "fact",
+      });
+
+    renderDashboard();
+
+    await screen.findByText("Ask about the property, amenities, parking, policies, or nearby recommendations.");
+    await user.type(screen.getByPlaceholderText("Ask about your room, dates, parking, breakfast, or the property..."), "What are the restaurant hours?");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText("Which dining venue do you mean: Farley or Sula?");
+
+    await user.type(screen.getByPlaceholderText("Ask about your room, dates, parking, breakfast, or the property..."), "Farley");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    expect(await screen.findByText("Session belongs to a different property.")).toBeTruthy();
+
+    await user.clear(screen.getByPlaceholderText("Ask about your room, dates, parking, breakfast, or the property..."));
+    await user.type(screen.getByPlaceholderText("Ask about your room, dates, parking, breakfast, or the property..."), "When is breakfast?");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(mockedAnswerConciergeQuestion).toHaveBeenNthCalledWith(
+      3,
+      "inn_at_mount_shasta",
+      "When is breakfast?",
+      { sessionId: undefined },
+    );
   });
 });

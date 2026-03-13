@@ -81,7 +81,9 @@ describe("DemoChatDashboard", () => {
     await user.type(screen.getByPlaceholderText("Type your request..."), "Is the pool heated?");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
-    expect(mockedAnswerConciergeQuestion).toHaveBeenCalledWith("demo_property", "Is the pool heated?");
+    expect(mockedAnswerConciergeQuestion).toHaveBeenCalledWith("demo_property", "Is the pool heated?", {
+      sessionId: undefined,
+    });
     expect(await screen.findByText("Yes, the pool is heated year-round.")).toBeTruthy();
     expect(screen.getByText("fact")).toBeTruthy();
     expect(screen.getByText("Confidence 92%")).toBeTruthy();
@@ -123,12 +125,76 @@ describe("DemoChatDashboard", () => {
     await user.type(screen.getByPlaceholderText("Type your request..."), "What parking is available?");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
-    expect(mockedAnswerConciergeQuestion).toHaveBeenCalledWith("demo_hotel_sf", "What parking is available?");
+    expect(mockedAnswerConciergeQuestion).toHaveBeenCalledWith("demo_hotel_sf", "What parking is available?", {
+      sessionId: undefined,
+    });
+  });
+
+  it("preserves the backend session across clarification follow-ups", async () => {
+    const user = userEvent.setup();
+    mockedAnswerConciergeQuestion
+      .mockResolvedValueOnce({
+        answer: "Which dining venue do you mean: Farley or Sula?",
+        confidence: 0.35,
+        sources: [],
+        answerType: "clarification",
+        conversation: {
+          sessionId: "sess_123",
+          mode: "knowledge",
+          status: "needs_clarification",
+          missingFields: [],
+        },
+      })
+      .mockResolvedValueOnce({
+        answer: "Farley serves breakfast from 7 to 10 AM.",
+        confidence: 0.91,
+        sources: [],
+        answerType: "fact",
+        conversation: {
+          sessionId: "sess_123",
+          mode: "knowledge",
+          status: "answered",
+          missingFields: [],
+        },
+      });
+
+    renderDashboard();
+
+    await screen.findByText("Ask me anything about this property, including amenities, policies, parking, or dining.");
+    await user.type(screen.getByPlaceholderText("Type your request..."), "What are the restaurant hours?");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText("Which dining venue do you mean: Farley or Sula?");
+
+    await user.type(screen.getByPlaceholderText("Type your request..."), "Farley");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(mockedAnswerConciergeQuestion).toHaveBeenNthCalledWith(
+      1,
+      "demo_property",
+      "What are the restaurant hours?",
+      { sessionId: undefined },
+    );
+    expect(mockedAnswerConciergeQuestion).toHaveBeenNthCalledWith(2, "demo_property", "Farley", {
+      sessionId: "sess_123",
+    });
+    expect(await screen.findByText("Farley serves breakfast from 7 to 10 AM.")).toBeTruthy();
   });
 
   it("retries the same question after a request failure", async () => {
     const user = userEvent.setup();
     mockedAnswerConciergeQuestion
+      .mockResolvedValueOnce({
+        answer: "Which room type are you interested in?",
+        confidence: 0.32,
+        sources: [],
+        answerType: "clarification",
+        conversation: {
+          sessionId: "sess_retry",
+          mode: "knowledge",
+          status: "needs_clarification",
+          missingFields: [],
+        },
+      })
       .mockRejectedValueOnce(new Error("network"))
       .mockResolvedValueOnce({
         answer: "Breakfast starts at 7 AM.",
@@ -140,14 +206,120 @@ describe("DemoChatDashboard", () => {
     renderDashboard();
 
     await screen.findByText("Ask me anything about this property, including amenities, policies, parking, or dining.");
+    await user.type(screen.getByPlaceholderText("Type your request..."), "Tell me about room options");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText("Which room type are you interested in?");
+
     await user.type(screen.getByPlaceholderText("Type your request..."), "When is breakfast?");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
     expect(await screen.findByText("Network error. Retry with the same message.")).toBeTruthy();
     await user.click(await screen.findByRole("button", { name: "Retry" }));
 
-    expect(mockedAnswerConciergeQuestion).toHaveBeenCalledTimes(2);
+    expect(mockedAnswerConciergeQuestion).toHaveBeenCalledTimes(3);
+    expect(mockedAnswerConciergeQuestion).toHaveBeenNthCalledWith(
+      2,
+      "demo_property",
+      "When is breakfast?",
+      { sessionId: "sess_retry" },
+    );
+    expect(mockedAnswerConciergeQuestion).toHaveBeenNthCalledWith(
+      3,
+      "demo_property",
+      "When is breakfast?",
+      { sessionId: "sess_retry" },
+    );
     expect(await screen.findByText("Breakfast starts at 7 AM.")).toBeTruthy();
+  });
+
+  it("clears the active session after restarting the chat", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    mockedAnswerConciergeQuestion
+      .mockResolvedValueOnce({
+        answer: "Which dining venue do you mean: Farley or Sula?",
+        confidence: 0.35,
+        sources: [],
+        answerType: "clarification",
+        conversation: {
+          sessionId: "sess_reset",
+          mode: "knowledge",
+          status: "needs_clarification",
+          missingFields: [],
+        },
+      })
+      .mockResolvedValueOnce({
+        answer: "Breakfast runs daily.",
+        confidence: 0.8,
+        sources: [],
+        answerType: "fact",
+      });
+
+    renderDashboard();
+
+    await screen.findByText("Ask me anything about this property, including amenities, policies, parking, or dining.");
+    await user.type(screen.getByPlaceholderText("Type your request..."), "What are the restaurant hours?");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText("Which dining venue do you mean: Farley or Sula?");
+
+    await user.click(screen.getByRole("button", { name: "Start new chat" }));
+    await user.type(screen.getByPlaceholderText("Type your request..."), "When is breakfast?");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(mockedAnswerConciergeQuestion).toHaveBeenNthCalledWith(
+      2,
+      "demo_property",
+      "When is breakfast?",
+      { sessionId: undefined },
+    );
+  });
+
+  it("clears the cached session when the backend rejects it for the wrong property", async () => {
+    const user = userEvent.setup();
+    mockedAnswerConciergeQuestion
+      .mockResolvedValueOnce({
+        answer: "Which dining venue do you mean: Farley or Sula?",
+        confidence: 0.35,
+        sources: [],
+        answerType: "clarification",
+        conversation: {
+          sessionId: "sess_409",
+          mode: "knowledge",
+          status: "needs_clarification",
+          missingFields: [],
+        },
+      })
+      .mockRejectedValueOnce(
+        new ApiClientRequestError({
+          status: 409,
+          message: "Session belongs to a different property.",
+        }),
+      )
+      .mockResolvedValueOnce({
+        answer: "Breakfast is served in the lobby restaurant.",
+        confidence: 0.74,
+        sources: [],
+        answerType: "fact",
+      });
+
+    renderDashboard();
+
+    await screen.findByText("Ask me anything about this property, including amenities, policies, parking, or dining.");
+    await user.type(screen.getByPlaceholderText("Type your request..."), "What are the restaurant hours?");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText("Which dining venue do you mean: Farley or Sula?");
+
+    await user.type(screen.getByPlaceholderText("Type your request..."), "Farley");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    expect(await screen.findByText("Session belongs to a different property.")).toBeTruthy();
+
+    await user.clear(screen.getByPlaceholderText("Type your request..."));
+    await user.type(screen.getByPlaceholderText("Type your request..."), "When is breakfast?");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(mockedAnswerConciergeQuestion).toHaveBeenNthCalledWith(3, "demo_property", "When is breakfast?", {
+      sessionId: undefined,
+    });
   });
 
   it("shows a rate-limit banner from backend 429 errors", async () => {

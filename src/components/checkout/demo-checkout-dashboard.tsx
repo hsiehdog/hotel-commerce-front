@@ -74,6 +74,7 @@ export function DemoCheckoutDashboard() {
   const [chatError, setChatError] = useState<string | null>(null);
   const [isChatSending, setIsChatSending] = useState(false);
   const [composerValue, setComposerValue] = useState("");
+  const [chatSessionId, setChatSessionId] = useState<string | undefined>(undefined);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const requestedPropertyId = searchParams.get("propertyId");
@@ -107,6 +108,7 @@ export function DemoCheckoutDashboard() {
     }
     setChatError(null);
     setComposerValue("");
+    setChatSessionId(undefined);
     setChatMessages([
       {
         id: `${resolvedPropertyId}-greeting`,
@@ -151,6 +153,7 @@ export function DemoCheckoutDashboard() {
   async function restartChat() {
     setChatError(null);
     setComposerValue("");
+    setChatSessionId(undefined);
     setChatMessages([
       {
         id: `${resolvedPropertyId || DEFAULT_PROPERTY_ID}-greeting-${Date.now()}`,
@@ -191,7 +194,10 @@ export function DemoCheckoutDashboard() {
     setIsChatSending(true);
 
     try {
-      const response = await answerConciergeQuestion(resolvedPropertyId, message);
+      const response = await answerConciergeQuestion(resolvedPropertyId, message, {
+        sessionId: chatSessionId,
+      });
+      setChatSessionId(response.conversation?.sessionId ?? chatSessionId);
 
       setChatMessages((current) => [
         ...current,
@@ -206,9 +212,14 @@ export function DemoCheckoutDashboard() {
         },
       ]);
     } catch (error) {
+      if (error instanceof ApiClientRequestError && error.status === 409) {
+        setChatSessionId(undefined);
+      }
       const messageText =
         error instanceof ApiClientRequestError
-          ? error.message || "Unable to send your question right now."
+          ? error.status === 409
+            ? error.message || "The concierge session expired. Send your message again to start a new chat."
+            : error.message || "Unable to send your question right now."
           : "Network error while contacting the concierge.";
       setChatError(messageText);
     } finally {

@@ -23,6 +23,7 @@ type RetryBuffer = {
   propertyId: string;
   question: string;
   clientMessageId: string;
+  sessionId?: string;
 };
 
 type SendOptions = {
@@ -41,6 +42,10 @@ type ChatUiFlags = {
   rateLimitedUntil?: string;
 };
 
+type ChatThreadState = {
+  sessionId?: string;
+};
+
 type DemoChatState = {
   messages: DemoChatMessageItem[];
   pendingRequest: boolean;
@@ -48,6 +53,7 @@ type DemoChatState = {
   inFlightClientMessageId: string | null;
   retryBuffer: RetryBuffer | null;
   uiFlags: ChatUiFlags;
+  thread: ChatThreadState;
 };
 
 type ChatAction =
@@ -56,6 +62,7 @@ type ChatAction =
   | { type: "SET_ERROR"; error: NormalizedError | null }
   | { type: "SET_RETRY_BUFFER"; retryBuffer: RetryBuffer | null }
   | { type: "SET_RATE_LIMIT"; until?: string }
+  | { type: "SET_SESSION_ID"; sessionId?: string }
   | { type: "APPEND_MESSAGE"; message: DemoChatMessageItem };
 
 const initialState: DemoChatState = {
@@ -65,6 +72,7 @@ const initialState: DemoChatState = {
   inFlightClientMessageId: null,
   retryBuffer: null,
   uiFlags: {},
+  thread: {},
 };
 
 function reducer(state: DemoChatState, action: ChatAction): DemoChatState {
@@ -96,6 +104,14 @@ function reducer(state: DemoChatState, action: ChatAction): DemoChatState {
         uiFlags: {
           ...state.uiFlags,
           rateLimitedUntil: action.until,
+        },
+      };
+    case "SET_SESSION_ID":
+      return {
+        ...state,
+        thread: {
+          ...state.thread,
+          sessionId: action.sessionId,
         },
       };
     case "APPEND_MESSAGE":
@@ -261,6 +277,7 @@ export function DemoChatDashboard() {
       propertyId: selectedPropertyId,
       question: trimmed,
       clientMessageId: createClientMessageId(),
+      sessionId: state.thread.sessionId,
     };
 
     dispatch({ type: "SET_PENDING", pending: true, clientMessageId: payload.clientMessageId });
@@ -294,8 +311,15 @@ export function DemoChatDashboard() {
     const startedAt = performance.now();
 
     try {
-      const response = await answerConciergeQuestion(payload.propertyId, payload.question);
+      const response = await answerConciergeQuestion(payload.propertyId, payload.question, {
+        sessionId: payload.sessionId,
+      });
       const latencyMs = Math.round(performance.now() - startedAt);
+
+      dispatch({
+        type: "SET_SESSION_ID",
+        sessionId: response.conversation?.sessionId ?? payload.sessionId,
+      });
 
       dispatch({
         type: "APPEND_MESSAGE",
@@ -332,20 +356,31 @@ export function DemoChatDashboard() {
               status: 429,
               requestId: error.requestId,
             },
-          });
-        } else if (error.status === 400) {
-          dispatch({
-            type: "SET_ERROR",
+        });
+      } else if (error.status === 400) {
+        dispatch({
+          type: "SET_ERROR",
             error: {
               type: "validation",
               message: error.message || "Invalid request payload.",
               status: 400,
-              requestId: error.requestId,
-            },
-          });
-        } else {
-          dispatch({
-            type: "SET_ERROR",
+            requestId: error.requestId,
+          },
+        });
+      } else if (error.status === 409) {
+        dispatch({ type: "SET_SESSION_ID", sessionId: undefined });
+        dispatch({
+          type: "SET_ERROR",
+          error: {
+            type: "server",
+            message: error.message || "The concierge session expired. Send your message again to start a new chat.",
+            status: 409,
+            requestId: error.requestId,
+          },
+        });
+      } else {
+        dispatch({
+          type: "SET_ERROR",
             error: {
               type: "server",
               message: "Something went wrong. Retry your message.",
@@ -412,6 +447,8 @@ export function DemoChatDashboard() {
       type: "RESET_FOR_PROPERTY",
       greeting: buildGreetingMessage(selectedPropertyId),
     });
+    dispatch({ type: "SET_SESSION_ID", sessionId: undefined });
+    dispatch({ type: "SET_RETRY_BUFFER", retryBuffer: null });
     setComposerValue("");
   }
 

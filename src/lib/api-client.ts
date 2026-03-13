@@ -93,7 +93,40 @@ export type ChatResponseUi =
   | ChatResponseUiOfferRecommendation
   | ChatResponseUiError;
 
-export type ConciergeAnswerType = "fact" | "policy" | "summary" | "fallback" | (string & {});
+export type ConciergeAnswerType =
+  | "fact"
+  | "event"
+  | "retrieval"
+  | "clarification"
+  | "fallback"
+  | (string & {});
+
+export type ConciergeClarification = {
+  kind?: string | null;
+  targetSlots: string[];
+  prompt?: string | null;
+};
+
+export type ConciergeKnowledgeContext = {
+  entity?: string | null;
+  facet?: string | null;
+  subject?: string | null;
+  subjectTerms: string[];
+  lastQuestion?: string | null;
+  rewrittenQuestion?: string | null;
+};
+
+export type ConciergeConversationState = {
+  sessionId: string;
+  mode?: string | null;
+  status?: string | null;
+  slots?: Record<string, unknown> | null;
+  missingFields: string[];
+  clarification?: ConciergeClarification | null;
+  knowledgeContext?: ConciergeKnowledgeContext | null;
+};
+
+export type ConciergeReservationPayload = Record<string, unknown>;
 
 export type ConciergeAnswerSource = {
   id?: string;
@@ -110,6 +143,12 @@ export type ConciergeAnswer = {
   confidence: number | null;
   sources: ConciergeAnswerSource[];
   answerType: ConciergeAnswerType | null;
+  conversation?: ConciergeConversationState | null;
+  reservation?: ConciergeReservationPayload | null;
+};
+
+export type AnswerConciergeQuestionOptions = {
+  sessionId?: string;
 };
 
 export type OffersLogDecisionStatus = "OK" | "NO_OFFERS" | "FALLBACK_ONLY" | "ERROR";
@@ -530,6 +569,56 @@ function toStringArray(value: unknown): string[] {
     .filter(Boolean);
 }
 
+function parseConciergeClarification(value: unknown): ConciergeClarification | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return {
+    kind: firstString(value.kind) ?? null,
+    targetSlots: toStringArray(value.targetSlots ?? value.target_slots),
+    prompt: firstString(value.prompt) ?? null,
+  };
+}
+
+function parseConciergeKnowledgeContext(value: unknown): ConciergeKnowledgeContext | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return {
+    entity: firstString(value.entity) ?? null,
+    facet: firstString(value.facet) ?? null,
+    subject: firstString(value.subject) ?? null,
+    subjectTerms: toStringArray(value.subjectTerms ?? value.subject_terms),
+    lastQuestion: firstString(value.lastQuestion, value.last_question) ?? null,
+    rewrittenQuestion: firstString(value.rewrittenQuestion, value.rewritten_question) ?? null,
+  };
+}
+
+function parseConciergeConversationState(value: unknown): ConciergeConversationState | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const sessionId = firstString(value.sessionId, value.session_id);
+  if (!sessionId) {
+    return null;
+  }
+
+  return {
+    sessionId,
+    mode: firstString(value.mode) ?? null,
+    status: firstString(value.status) ?? null,
+    slots: isRecord(value.slots) ? { ...value.slots } : null,
+    missingFields: toStringArray(value.missingFields ?? value.missing_fields),
+    clarification: parseConciergeClarification(value.clarification),
+    knowledgeContext: parseConciergeKnowledgeContext(
+      value.knowledgeContext ?? value.knowledge_context,
+    ),
+  };
+}
+
 function parseAuditOutboxState(value: unknown): AuditOutboxState | null {
   if (value === "PENDING" || value === "ENQUEUED" || value === "PROCESSED" || value === "DLQ") {
     return value;
@@ -617,6 +706,7 @@ export async function sendChatMessage(message: string): Promise<ChatMessage> {
 export async function answerConciergeQuestion(
   propertyId: string,
   question: string,
+  options: AnswerConciergeQuestionOptions = {},
 ): Promise<ConciergeAnswer> {
   if (isMock) {
     await delay(520);
@@ -641,11 +731,16 @@ export async function answerConciergeQuestion(
       sources?: unknown[];
       answer_type?: string | null;
       answerType?: string | null;
+      conversation?: unknown;
+      reservation?: unknown;
     };
   }>(
     `/properties/${encodeURIComponent(propertyId)}/concierge/answer`,
     "POST",
-    { question },
+    {
+      question,
+      ...(options.sessionId ? { session_id: options.sessionId } : {}),
+    },
   );
 
   const data = isRecord(response.data) ? response.data : {};
@@ -656,6 +751,8 @@ export async function answerConciergeQuestion(
       ? data.sources.filter(isRecord).map((source) => ({ ...source }))
       : [],
     answerType: firstString(data.answerType, data.answer_type) ?? null,
+    conversation: parseConciergeConversationState(data.conversation),
+    reservation: isRecord(data.reservation) ? { ...data.reservation } : null,
   };
 }
 
