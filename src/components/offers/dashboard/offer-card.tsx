@@ -1,5 +1,7 @@
 "use client";
 
+import type { ReactNode } from "react";
+
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { RecommendedRoom } from "@/lib/offers-demo";
@@ -8,9 +10,22 @@ import { formatMoney } from "./utils";
 type DecisionOfferCardProps = {
   title: string;
   offer: RecommendedRoom | null;
+  currency?: string;
+  badgeLabel?: string | null;
+  badgeLabels?: string[];
+  footerAction?: ReactNode;
+  tone?: "recommended" | "selected";
 };
 
-export function DecisionOfferCard({ title, offer }: DecisionOfferCardProps) {
+export function DecisionOfferCard({
+  title,
+  offer,
+  currency = "USD",
+  badgeLabel = "Recommended",
+  badgeLabels,
+  footerAction,
+  tone = "recommended",
+}: DecisionOfferCardProps) {
   if (!offer) {
     return (
       <Card className="gap-3 py-4">
@@ -25,13 +40,30 @@ export function DecisionOfferCard({ title, offer }: DecisionOfferCardProps) {
   }
 
   const description = title === offer.roomType ? offer.ratePlan : `${offer.roomType} | ${offer.ratePlan}`;
+  const toneClassName =
+    tone === "selected"
+      ? "border-sky-300/70 bg-sky-50/70 dark:bg-sky-950/30"
+      : "border-emerald-300/70 bg-emerald-50/60 dark:bg-emerald-950/30";
+  const badgeClassName =
+    tone === "selected"
+      ? "bg-sky-600 hover:bg-sky-700"
+      : "bg-emerald-600 hover:bg-emerald-700";
+  const resolvedBadgeLabels = badgeLabels ?? (badgeLabel ? [badgeLabel] : []);
 
   return (
-    <Card className="border-emerald-300/70 bg-emerald-50/60 dark:bg-emerald-950/30">
+    <Card className={toneClassName}>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg">{title}</CardTitle>
-          <Badge className="bg-emerald-600 hover:bg-emerald-700">Recommended</Badge>
+          {resolvedBadgeLabels.length > 0 ? (
+            <div className="flex flex-col items-end gap-1">
+              {resolvedBadgeLabels.map((label) => (
+                <Badge key={label} className={badgeClassName}>
+                  {label}
+                </Badge>
+              ))}
+            </div>
+          ) : null}
         </div>
         <CardDescription className="text-xs">{description}</CardDescription>
       </CardHeader>
@@ -40,20 +72,20 @@ export function DecisionOfferCard({ title, offer }: DecisionOfferCardProps) {
           {offer.nightlyPrice !== null ? (
             <div className="flex items-baseline justify-between border-b border-dashed pb-2">
               <span className="text-xs font-medium text-muted-foreground">Per night</span>
-              <span className="text-base font-semibold text-foreground">{formatMoney(offer.nightlyPrice)}</span>
+              <span className="text-base font-semibold text-foreground">{formatMoney(offer.nightlyPrice, currency)}</span>
             </div>
           ) : null}
           <div className="mt-2 space-y-1 text-xs text-muted-foreground">
             {buildBreakdownRows(offer).map((row) => (
               <div key={`${offer.roomTypeId}-${row.label}`} className="flex justify-between">
                 <span>{row.label}</span>
-                <span className="font-mono">{formatMoney(row.amount)}</span>
+                <span className="font-mono">{formatMoney(row.amount, currency)}</span>
               </div>
             ))}
           </div>
           <div className="mt-3 flex items-baseline justify-between border-t border-dashed pt-3">
             <span className="text-xs font-medium text-muted-foreground">Total Price</span>
-            <span className="text-lg font-bold text-primary">{formatMoney(offer.totalPrice)}</span>
+            <span className="text-lg font-bold text-primary">{formatMoney(offer.totalPrice, currency)}</span>
           </div>
         </div>
 
@@ -83,6 +115,8 @@ export function DecisionOfferCard({ title, offer }: DecisionOfferCardProps) {
             <p className="text-xs text-foreground">{offer.inventoryNote}</p>
           </div>
         ) : null}
+
+        {footerAction ? <div className="pt-1">{footerAction}</div> : null}
       </CardContent>
     </Card>
   );

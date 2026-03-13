@@ -126,7 +126,91 @@ export type ConciergeConversationState = {
   knowledgeContext?: ConciergeKnowledgeContext | null;
 };
 
-export type ConciergeReservationPayload = Record<string, unknown>;
+export type ConciergeSelectedAddOn = {
+  bundleType: string;
+  label: string;
+  estimatedPriceDelta: number;
+};
+
+export type ConciergeCurrentSelection = {
+  roomTypeId: string;
+  ratePlanId: string;
+  roomType: string;
+  ratePlan: string;
+  selectedAddOns: string[];
+};
+
+export type ConciergeCurrentPricing = {
+  currency: string;
+  roomTotal: number;
+  addOnsTotal: number;
+  total: number;
+  nightlyPrice?: number | null;
+  subtotal?: number | null;
+  taxesAndFees?: number | null;
+  selectedAddOns: ConciergeSelectedAddOn[];
+};
+
+export type ConciergeClientAction =
+  | {
+      type: "select_room";
+      roomTypeId: string;
+      ratePlanId: string;
+    }
+  | {
+      type: "add_addon" | "remove_addon";
+      bundleType: string;
+    };
+
+export type ConciergeReservationPayload = {
+  recommendedRoom?: Record<string, unknown> | null;
+  upgradeLadder?: Record<string, unknown>[];
+  recommendedOffers?: Record<string, unknown>[];
+  currentSelection?: ConciergeCurrentSelection | null;
+  currentPricing?: ConciergeCurrentPricing | null;
+};
+
+export type ConciergeContextSearch = {
+  checkIn: string;
+  checkOut: string;
+  adults: number;
+  rooms: number;
+  children: number;
+  petFriendly: boolean;
+  accessibleRoom: boolean;
+  needsTwoBeds: boolean;
+  parkingNeeded: boolean;
+  breakfastPackage: boolean;
+  earlyCheckIn: boolean;
+  lateCheckOut: boolean;
+  stubScenario?: string;
+};
+
+export type ConciergeContextSelectionInput = {
+  roomTypeId: string;
+  ratePlanId: string;
+  selectedAddOns: string[];
+};
+
+export type ConciergeContextSyncPayload = {
+  sessionId?: string;
+  offerContext: {
+    search: ConciergeContextSearch;
+    recommendedRoom: Record<string, unknown> | null;
+    upgradeLadder: Array<Record<string, unknown>>;
+    recommendedOffers: Array<Record<string, unknown>>;
+    currency: string;
+    generatedAt?: string;
+    currentSelection?: ConciergeContextSelectionInput | null;
+  };
+};
+
+export type ConciergeContextSyncResult = {
+  sessionId: string;
+  offerContext?: Record<string, unknown> | null;
+  currentSelection?: ConciergeCurrentSelection | null;
+  currentPricing?: ConciergeCurrentPricing | null;
+};
 
 export type ConciergeAnswerSource = {
   id?: string;
@@ -145,6 +229,7 @@ export type ConciergeAnswer = {
   answerType: ConciergeAnswerType | null;
   conversation?: ConciergeConversationState | null;
   reservation?: ConciergeReservationPayload | null;
+  clientAction?: ConciergeClientAction | null;
 };
 
 export type AnswerConciergeQuestionOptions = {
@@ -569,6 +654,147 @@ function toStringArray(value: unknown): string[] {
     .filter(Boolean);
 }
 
+function parseConciergeSelectedAddOns(value: unknown): ConciergeSelectedAddOn[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((entry) => {
+    if (!isRecord(entry)) {
+      return [];
+    }
+
+    const bundleType = firstString(entry.bundleType, entry.bundle_type);
+    const label = firstString(entry.label);
+    const estimatedPriceDelta = firstNumber(
+      entry.estimatedPriceDelta,
+      entry.estimated_price_delta,
+    );
+
+    if (!bundleType || !label || estimatedPriceDelta === undefined) {
+      return [];
+    }
+
+    return [
+      {
+        bundleType,
+        label,
+        estimatedPriceDelta,
+      },
+    ];
+  });
+}
+
+function parseConciergeCurrentSelection(value: unknown): ConciergeCurrentSelection | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const roomTypeId = firstString(value.roomTypeId, value.room_type_id);
+  const ratePlanId = firstString(value.ratePlanId, value.rate_plan_id);
+  const roomType = firstString(value.roomType, value.room_type);
+  const ratePlan = firstString(value.ratePlan, value.rate_plan);
+
+  if (!roomTypeId || !ratePlanId || !roomType || !ratePlan) {
+    return null;
+  }
+
+  return {
+    roomTypeId,
+    ratePlanId,
+    roomType,
+    ratePlan,
+    selectedAddOns: toStringArray(value.selectedAddOns ?? value.selected_add_ons),
+  };
+}
+
+function parseConciergeCurrentPricing(value: unknown): ConciergeCurrentPricing | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const currency = firstString(value.currency);
+  const roomTotal = firstNumber(value.roomTotal, value.room_total);
+  const addOnsTotal = firstNumber(value.addOnsTotal, value.add_ons_total);
+  const total = firstNumber(value.total);
+
+  if (!currency || roomTotal === undefined || addOnsTotal === undefined || total === undefined) {
+    return null;
+  }
+
+  return {
+    currency,
+    roomTotal,
+    addOnsTotal,
+    total,
+    nightlyPrice: firstNumber(value.nightlyPrice, value.nightly_price) ?? null,
+    subtotal: firstNumber(value.subtotal) ?? null,
+    taxesAndFees: firstNumber(value.taxesAndFees, value.taxes_and_fees) ?? null,
+    selectedAddOns: parseConciergeSelectedAddOns(value.selectedAddOns ?? value.selected_add_ons),
+  };
+}
+
+function parseConciergeClientAction(value: unknown): ConciergeClientAction | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const type = firstString(value.type);
+  if (type === "select_room") {
+    const roomTypeId = firstString(value.roomTypeId, value.room_type_id);
+    const ratePlanId = firstString(value.ratePlanId, value.rate_plan_id);
+    if (!roomTypeId || !ratePlanId) {
+      return null;
+    }
+
+    return {
+      type,
+      roomTypeId,
+      ratePlanId,
+    };
+  }
+
+  if (type === "add_addon" || type === "remove_addon") {
+    const bundleType = firstString(value.bundleType, value.bundle_type);
+    if (!bundleType) {
+      return null;
+    }
+
+    return {
+      type,
+      bundleType,
+    };
+  }
+
+  return null;
+}
+
+function parseConciergeReservationPayload(value: unknown): ConciergeReservationPayload | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const recommendedRoom = value.recommendedRoom ?? value.recommended_room;
+  const upgradeLadder = value.upgradeLadder ?? value.upgrade_ladder;
+  const recommendedOffers = value.recommendedOffers ?? value.recommended_offers;
+
+  return {
+    recommendedRoom: isRecord(recommendedRoom)
+      ? { ...recommendedRoom }
+      : null,
+    upgradeLadder: Array.isArray(upgradeLadder)
+      ? upgradeLadder.filter(isRecord).map((entry) => ({ ...entry }))
+      : [],
+    recommendedOffers: Array.isArray(recommendedOffers)
+      ? recommendedOffers.filter(isRecord).map((entry) => ({ ...entry }))
+      : [],
+    currentSelection: parseConciergeCurrentSelection(
+      value.currentSelection ?? value.current_selection,
+    ),
+    currentPricing: parseConciergeCurrentPricing(value.currentPricing ?? value.current_pricing),
+  };
+}
+
 function parseConciergeClarification(value: unknown): ConciergeClarification | null {
   if (!isRecord(value)) {
     return null;
@@ -703,6 +929,113 @@ export async function sendChatMessage(message: string): Promise<ChatMessage> {
   return mapToChatMessage(response.data);
 }
 
+function toSnakeCaseSearch(search: ConciergeContextSearch): Record<string, unknown> {
+  return {
+    check_in: search.checkIn,
+    check_out: search.checkOut,
+    adults: search.adults,
+    rooms: search.rooms,
+    children: search.children,
+    pet_friendly: search.petFriendly,
+    accessible_room: search.accessibleRoom,
+    needs_two_beds: search.needsTwoBeds,
+    parking_needed: search.parkingNeeded,
+    breakfast_package: search.breakfastPackage,
+    early_check_in: search.earlyCheckIn,
+    late_check_out: search.lateCheckOut,
+    ...(search.stubScenario ? { stub_scenario: search.stubScenario } : {}),
+  };
+}
+
+function toSnakeCaseCurrentSelection(
+  selection: ConciergeContextSelectionInput | null | undefined,
+): Record<string, unknown> | undefined {
+  if (!selection) {
+    return undefined;
+  }
+
+  return {
+    room_type_id: selection.roomTypeId,
+    rate_plan_id: selection.ratePlanId,
+    selected_add_ons: selection.selectedAddOns,
+  };
+}
+
+export async function syncConciergeContext(
+  propertyId: string,
+  payload: ConciergeContextSyncPayload,
+): Promise<ConciergeContextSyncResult> {
+  if (isMock) {
+    await delay(320);
+
+    const currentSelection = payload.offerContext.currentSelection
+      ? {
+          roomTypeId: payload.offerContext.currentSelection.roomTypeId,
+          ratePlanId: payload.offerContext.currentSelection.ratePlanId,
+          roomType: payload.offerContext.currentSelection.roomTypeId,
+          ratePlan: payload.offerContext.currentSelection.ratePlanId,
+          selectedAddOns: payload.offerContext.currentSelection.selectedAddOns,
+        }
+      : null;
+
+    return {
+      sessionId: payload.sessionId ?? crypto.randomUUID(),
+      offerContext: payload.offerContext.recommendedRoom,
+      currentSelection,
+      currentPricing: null,
+    };
+  }
+
+  const response = await request<{
+    data?: {
+      session_id?: string;
+      sessionId?: string;
+      offer_context?: unknown;
+      offerContext?: unknown;
+      current_selection?: unknown;
+      currentSelection?: unknown;
+      current_pricing?: unknown;
+      currentPricing?: unknown;
+    };
+  }>(`/properties/${encodeURIComponent(propertyId)}/concierge/context`, "POST", {
+    ...(payload.sessionId ? { session_id: payload.sessionId } : {}),
+    offer_context: {
+      search: toSnakeCaseSearch(payload.offerContext.search),
+      recommended_room: payload.offerContext.recommendedRoom,
+      upgrade_ladder: payload.offerContext.upgradeLadder,
+      recommended_offers: payload.offerContext.recommendedOffers,
+      currency: payload.offerContext.currency,
+      ...(payload.offerContext.generatedAt ? { generated_at: payload.offerContext.generatedAt } : {}),
+      ...(payload.offerContext.currentSelection
+        ? {
+            current_selection: toSnakeCaseCurrentSelection(
+              payload.offerContext.currentSelection,
+            ),
+          }
+        : {}),
+    },
+  });
+
+  const data = isRecord(response.data) ? response.data : {};
+  const sessionId = firstString(data.sessionId, data.session_id);
+  if (!sessionId) {
+    throw new Error("Concierge context sync response is missing session_id.");
+  }
+
+  const offerContext = data.offerContext ?? data.offer_context;
+
+  return {
+    sessionId,
+    offerContext: isRecord(offerContext)
+      ? { ...offerContext }
+      : null,
+    currentSelection: parseConciergeCurrentSelection(
+      data.currentSelection ?? data.current_selection,
+    ),
+    currentPricing: parseConciergeCurrentPricing(data.currentPricing ?? data.current_pricing),
+  };
+}
+
 export async function answerConciergeQuestion(
   propertyId: string,
   question: string,
@@ -733,6 +1066,8 @@ export async function answerConciergeQuestion(
       answerType?: string | null;
       conversation?: unknown;
       reservation?: unknown;
+      client_action?: unknown;
+      clientAction?: unknown;
     };
   }>(
     `/properties/${encodeURIComponent(propertyId)}/concierge/answer`,
@@ -752,7 +1087,8 @@ export async function answerConciergeQuestion(
       : [],
     answerType: firstString(data.answerType, data.answer_type) ?? null,
     conversation: parseConciergeConversationState(data.conversation),
-    reservation: isRecord(data.reservation) ? { ...data.reservation } : null,
+    reservation: parseConciergeReservationPayload(data.reservation),
+    clientAction: parseConciergeClientAction(data.clientAction ?? data.client_action),
   };
 }
 

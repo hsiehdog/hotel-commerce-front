@@ -1,9 +1,19 @@
 "use client";
 
 import { FormEvent, KeyboardEvent, RefObject, useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, MessageSquareMore, RefreshCcw, SendHorizontal, Sparkles } from "lucide-react";
+import { MessageSquareMore, RefreshCcw, SendHorizontal, Sparkles, Loader2 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 
+import { CheckoutRecommendationPanel } from "@/components/checkout/checkout-recommendation-panel";
+import {
+  applyClientAction,
+  buildContextSyncPayload,
+  buildLocalCurrentPricing,
+  getInitialRoomSelection,
+  normalizeSelectedAddOns,
+  selectionFromCurrentSelection,
+  type CheckoutRoomSelection,
+} from "@/components/checkout/demo-checkout-state";
 import { DemoChatMessage, DemoChatMessageItem } from "@/components/chat/demo-chat-message";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,21 +24,20 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   ApiClientRequestError,
   answerConciergeQuestion,
+  syncConciergeContext,
+  type ConciergeContextSyncResult,
+  type ConciergeCurrentPricing,
 } from "@/lib/api-client";
 import {
-  buildRoomOccupancies,
   buildOffersGenerateRequest,
+  buildRoomOccupancies,
   getDefaultOffersDraft,
   parseOffersResponse,
   requestOfferGeneration,
   type OffersDraft,
   type ParsedOffersResponse,
-  type RecommendedUpsell,
-  type UpgradeLadderEntry,
   validateOffersDraft,
 } from "@/lib/offers-demo";
-import { DecisionOfferCard } from "@/components/offers/dashboard/offer-card";
-import { formatMoney } from "@/components/offers/dashboard/utils";
 import { useOfferPropertyOptions } from "@/components/offers/use-offer-property-options";
 
 const DEFAULT_PROPERTY_ID = "demo_property";
@@ -48,6 +57,15 @@ function buildInitialDraft(): OffersDraft {
   };
 }
 
+function buildGreetingMessage(propertyId: string): DemoChatMessageItem {
+  return {
+    id: `${propertyId}-greeting-${Date.now()}`,
+    role: "assistant",
+    text: "Ask about the property, amenities, parking, policies, or nearby recommendations.",
+    createdAt: new Date().toISOString(),
+  };
+}
+
 function toPositiveNumber(value: string, minimum: number): string {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) {
@@ -61,6 +79,18 @@ function normalizeChildrenCount(value: string): number {
   return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 0;
 }
 
+function buildSyncErrorMessage(error: unknown): string {
+  if (error instanceof ApiClientRequestError) {
+    return error.message || "Unable to sync the current reservation context.";
+  }
+
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return "Unable to sync the current reservation context.";
+}
+
 export function DemoCheckoutDashboard() {
   const searchParams = useSearchParams();
   const { defaultPropertyId, propertyOptions, propertiesLoading } = useOfferPropertyOptions("checkout-properties");
@@ -69,6 +99,11 @@ export function DemoCheckoutDashboard() {
   const [apiError, setApiError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [parsedResponse, setParsedResponse] = useState<ParsedOffersResponse | null>(null);
+  const [selectedRoom, setSelectedRoom] = useState<CheckoutRoomSelection | null>(null);
+  const [selectedAddOns, setSelectedAddOns] = useState<string[]>([]);
+  const [currentPricing, setCurrentPricing] = useState<ConciergeCurrentPricing | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
   const [chatMessages, setChatMessages] = useState<DemoChatMessageItem[]>([]);
   const [chatError, setChatError] = useState<string | null>(null);
@@ -106,17 +141,19 @@ export function DemoCheckoutDashboard() {
     if (!resolvedPropertyId) {
       return;
     }
+
+    setApiError(null);
+    setFormErrors([]);
+    setParsedResponse(null);
+    setSelectedRoom(null);
+    setSelectedAddOns([]);
+    setCurrentPricing(null);
+    setIsSyncing(false);
+    setSyncError(null);
     setChatError(null);
     setComposerValue("");
     setChatSessionId(undefined);
-    setChatMessages([
-      {
-        id: `${resolvedPropertyId}-greeting`,
-        role: "assistant",
-        text: "Ask about the property, amenities, parking, policies, or nearby recommendations.",
-        createdAt: new Date().toISOString(),
-      },
-    ]);
+    setChatMessages([buildGreetingMessage(resolvedPropertyId)]);
   }, [resolvedPropertyId]);
 
   useEffect(() => {
@@ -124,6 +161,68 @@ export function DemoCheckoutDashboard() {
       messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [chatMessages, isChatSending]);
+
+  async function syncReservationContext({
+    nextParsedResponse,
+    nextSelectedRoom,
+    nextSelectedAddOns,
+    sessionIdOverride,
+  }: {
+    nextParsedResponse: ParsedOffersResponse | null;
+    nextSelectedRoom: CheckoutRoomSelection | null;
+    nextSelectedAddOns: string[];
+    sessionIdOverride?: string;
+  }): Promise<ConciergeContextSyncResult | null> {
+    if (!resolvedPropertyId || !nextParsedResponse) {
+      return null;
+    }
+
+    setIsSyncing(true);
+    setSyncError(null);
+
+    try {
+      const response = await syncConciergeContext(
+        resolvedPropertyId,
+        buildContextSyncPayload({
+          draft,
+          parsedResponse: nextParsedResponse,
+          selectedRoom: nextSelectedRoom,
+          selectedAddOns: nextSelectedAddOns,
+          sessionId: sessionIdOverride,
+        }),
+      );
+
+      const resolvedSelection =
+        selectionFromCurrentSelection(response.currentSelection) ?? nextSelectedRoom;
+      const resolvedAddOns = normalizeSelectedAddOns(
+        nextParsedResponse.recommendedOffers,
+        response.currentSelection?.selectedAddOns ?? nextSelectedAddOns,
+      );
+      const resolvedPricing =
+        response.currentPricing ??
+        buildLocalCurrentPricing({
+          parsedResponse: nextParsedResponse,
+          selectedRoom: resolvedSelection,
+          selectedAddOns: resolvedAddOns,
+        });
+
+      setChatSessionId(response.sessionId);
+      setSelectedRoom(resolvedSelection);
+      setSelectedAddOns(resolvedAddOns);
+      setCurrentPricing(resolvedPricing);
+
+      return response;
+    } catch (error) {
+      const message = buildSyncErrorMessage(error);
+      setSyncError(message);
+      if (error instanceof ApiClientRequestError && error.status === 409) {
+        setChatSessionId(undefined);
+      }
+      return null;
+    } finally {
+      setIsSyncing(false);
+    }
+  }
 
   async function handleOfferSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -141,9 +240,33 @@ export function DemoCheckoutDashboard() {
 
     try {
       const response = await requestOfferGeneration(payload);
-      setParsedResponse(parseOffersResponse(response));
+      const nextParsedResponse = parseOffersResponse(response);
+      const nextSelectedRoom = getInitialRoomSelection(nextParsedResponse);
+      const nextSelectedAddOns: string[] = [];
+      const nextCurrentPricing = buildLocalCurrentPricing({
+        parsedResponse: nextParsedResponse,
+        selectedRoom: nextSelectedRoom,
+        selectedAddOns: nextSelectedAddOns,
+      });
+
+      setParsedResponse(nextParsedResponse);
+      setSelectedRoom(nextSelectedRoom);
+      setSelectedAddOns(nextSelectedAddOns);
+      setCurrentPricing(nextCurrentPricing);
+      setSyncError(null);
+
+      await syncReservationContext({
+        nextParsedResponse,
+        nextSelectedRoom,
+        nextSelectedAddOns,
+        sessionIdOverride: chatSessionId,
+      });
     } catch (error) {
       setParsedResponse(null);
+      setSelectedRoom(null);
+      setSelectedAddOns([]);
+      setCurrentPricing(null);
+      setSyncError(null);
       setApiError(error instanceof Error ? error.message : "Unable to load a booking recommendation.");
     } finally {
       setIsSubmitting(false);
@@ -151,17 +274,21 @@ export function DemoCheckoutDashboard() {
   }
 
   async function restartChat() {
+    const greeting = buildGreetingMessage(resolvedPropertyId || DEFAULT_PROPERTY_ID);
+
     setChatError(null);
     setComposerValue("");
     setChatSessionId(undefined);
-    setChatMessages([
-      {
-        id: `${resolvedPropertyId || DEFAULT_PROPERTY_ID}-greeting-${Date.now()}`,
-        role: "assistant",
-        text: "Ask about the property, amenities, parking, policies, or nearby recommendations.",
-        createdAt: new Date().toISOString(),
-      },
-    ]);
+    setChatMessages([greeting]);
+
+    if (parsedResponse) {
+      await syncReservationContext({
+        nextParsedResponse: parsedResponse,
+        nextSelectedRoom: selectedRoom,
+        nextSelectedAddOns: selectedAddOns,
+        sessionIdOverride: undefined,
+      });
+    }
   }
 
   async function sendMessage() {
@@ -197,7 +324,33 @@ export function DemoCheckoutDashboard() {
       const response = await answerConciergeQuestion(resolvedPropertyId, message, {
         sessionId: chatSessionId,
       });
-      setChatSessionId(response.conversation?.sessionId ?? chatSessionId);
+
+      const nextSessionId = response.conversation?.sessionId ?? chatSessionId;
+      const reservationSelection = selectionFromCurrentSelection(response.reservation?.currentSelection);
+      const actionSelection = applyClientAction({
+        parsedResponse,
+        selectedRoom,
+        selectedAddOns,
+        action: response.clientAction,
+      });
+      const nextSelectedRoom = reservationSelection ?? actionSelection.selectedRoom;
+      const nextSelectedAddOns = normalizeSelectedAddOns(
+        parsedResponse?.recommendedOffers ?? [],
+        response.reservation?.currentSelection?.selectedAddOns ?? actionSelection.selectedAddOns,
+      );
+      const nextCurrentPricing =
+        response.reservation?.currentPricing ??
+        buildLocalCurrentPricing({
+          parsedResponse,
+          selectedRoom: nextSelectedRoom,
+          selectedAddOns: nextSelectedAddOns,
+        });
+
+      setChatSessionId(nextSessionId);
+      setSelectedRoom(nextSelectedRoom);
+      setSelectedAddOns(nextSelectedAddOns);
+      setCurrentPricing(nextCurrentPricing);
+      setSyncError(null);
 
       setChatMessages((current) => [
         ...current,
@@ -214,6 +367,7 @@ export function DemoCheckoutDashboard() {
     } catch (error) {
       if (error instanceof ApiClientRequestError && error.status === 409) {
         setChatSessionId(undefined);
+        setSyncError(error.message || "The concierge session expired. The next sync will create a new one.");
       }
       const messageText =
         error instanceof ApiClientRequestError
@@ -239,6 +393,49 @@ export function DemoCheckoutDashboard() {
 
     event.preventDefault();
     await sendMessage();
+  }
+
+  async function handleRoomSelection(nextSelectedRoom: CheckoutRoomSelection) {
+    const nextCurrentPricing = buildLocalCurrentPricing({
+      parsedResponse,
+      selectedRoom: nextSelectedRoom,
+      selectedAddOns,
+    });
+
+    setSelectedRoom(nextSelectedRoom);
+    setCurrentPricing(nextCurrentPricing);
+
+    await syncReservationContext({
+      nextParsedResponse: parsedResponse,
+      nextSelectedRoom,
+      nextSelectedAddOns: selectedAddOns,
+      sessionIdOverride: chatSessionId,
+    });
+  }
+
+  async function handleToggleAddOn(bundleType: string) {
+    const nextSelectedAddOns = selectedAddOns.includes(bundleType)
+      ? selectedAddOns.filter((value) => value !== bundleType)
+      : [...selectedAddOns, bundleType];
+    const normalizedAddOns = normalizeSelectedAddOns(
+      parsedResponse?.recommendedOffers ?? [],
+      nextSelectedAddOns,
+    );
+    const nextCurrentPricing = buildLocalCurrentPricing({
+      parsedResponse,
+      selectedRoom,
+      selectedAddOns: normalizedAddOns,
+    });
+
+    setSelectedAddOns(normalizedAddOns);
+    setCurrentPricing(nextCurrentPricing);
+
+    await syncReservationContext({
+      nextParsedResponse: parsedResponse,
+      nextSelectedRoom: selectedRoom,
+      nextSelectedAddOns: normalizedAddOns,
+      sessionIdOverride: chatSessionId,
+    });
   }
 
   function handleRoomsChange(value: string) {
@@ -296,273 +493,148 @@ export function DemoCheckoutDashboard() {
 
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_380px]">
-        <div className="space-y-6">
-          <Card className="border-border/60 bg-white shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-xl">
-                {propertiesLoading ? "Loading property..." : selectedPropertyName}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <form className="space-y-5" onSubmit={handleOfferSubmit}>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="check_in">Check-in</Label>
-                    <Input
-                      id="check_in"
-                      type="date"
-                      value={draft.check_in}
-                      onChange={(event) => setDraft((current) => ({ ...current, check_in: event.target.value }))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="check_out">Check-out</Label>
-                    <Input
-                      id="check_out"
-                      type="date"
-                      value={draft.check_out}
-                      onChange={(event) => setDraft((current) => ({ ...current, check_out: event.target.value }))}
-                    />
-                  </div>
+      <div className="space-y-6">
+        <Card className="border-border/60 bg-white shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-xl">
+              {propertiesLoading ? "Loading property..." : selectedPropertyName}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form className="space-y-5" onSubmit={handleOfferSubmit}>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="check_in">Check-in</Label>
+                  <Input
+                    id="check_in"
+                    type="date"
+                    value={draft.check_in}
+                    onChange={(event) => setDraft((current) => ({ ...current, check_in: event.target.value }))}
+                  />
                 </div>
-
-                <div className="grid gap-4 sm:grid-cols-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="rooms">Rooms</Label>
-                    <Input
-                      id="rooms"
-                      type="number"
-                      min={1}
-                      value={draft.rooms}
-                      onChange={(event) => handleRoomsChange(event.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="adults">Adults</Label>
-                    <Input
-                      id="adults"
-                      type="number"
-                      min={1}
-                      value={draft.adults}
-                      onChange={(event) => handleAdultsChange(event.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="children">Children</Label>
-                    <Input
-                      id="children"
-                      type="number"
-                      min={0}
-                      value={draft.children}
-                      onChange={(event) => handleChildrenChange(event.target.value)}
-                    />
-                  </div>
+                <div className="space-y-2">
+                  <Label htmlFor="check_out">Check-out</Label>
+                  <Input
+                    id="check_out"
+                    type="date"
+                    value={draft.check_out}
+                    onChange={(event) => setDraft((current) => ({ ...current, check_out: event.target.value }))}
+                  />
                 </div>
+              </div>
 
-                {draft.child_ages.length > 0 ? (
-                  <div className="space-y-2">
-                    <Label>Child ages</Label>
-                    <div className="grid gap-3 sm:grid-cols-3">
-                      {draft.child_ages.map((age, index) => (
-                        <div key={`child-age-${index}`} className="space-y-2">
-                          <Label htmlFor={`child_age_${index}`}>Child {index + 1} age</Label>
-                          <Input
-                            id={`child_age_${index}`}
-                            type="number"
-                            min={0}
-                            value={age}
-                            onChange={(event) => {
-                              const nextAge = normalizeChildrenCount(event.target.value);
-                              setDraft((current) => {
-                                const nextAges = [...current.child_ages];
-                                nextAges[index] = nextAge;
-                                return {
-                                  ...current,
-                                  child_ages: nextAges,
-                                };
-                              });
-                            }}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="space-y-2">
+                  <Label htmlFor="rooms">Rooms</Label>
+                  <Input
+                    id="rooms"
+                    type="number"
+                    min={1}
+                    value={draft.rooms}
+                    onChange={(event) => handleRoomsChange(event.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="adults">Adults</Label>
+                  <Input
+                    id="adults"
+                    type="number"
+                    min={1}
+                    value={draft.adults}
+                    onChange={(event) => handleAdultsChange(event.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="children">Children</Label>
+                  <Input
+                    id="children"
+                    type="number"
+                    min={0}
+                    value={draft.children}
+                    onChange={(event) => handleChildrenChange(event.target.value)}
+                  />
+                </div>
+              </div>
 
-                {formErrors.length > 0 ? (
-                  <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
-                    {formErrors.map((error) => (
-                      <p key={error}>{error}</p>
+              {draft.child_ages.length > 0 ? (
+                <div className="space-y-2">
+                  <Label>Child ages</Label>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    {draft.child_ages.map((age, index) => (
+                      <div key={`child-age-${index}`} className="space-y-2">
+                        <Label htmlFor={`child_age_${index}`}>Child {index + 1} age</Label>
+                        <Input
+                          id={`child_age_${index}`}
+                          type="number"
+                          min={0}
+                          value={age}
+                          onChange={(event) => {
+                            const nextAge = normalizeChildrenCount(event.target.value);
+                            setDraft((current) => {
+                              const nextAges = [...current.child_ages];
+                              nextAges[index] = nextAge;
+                              return {
+                                ...current,
+                                child_ages: nextAges,
+                              };
+                            });
+                          }}
+                        />
+                      </div>
                     ))}
                   </div>
-                ) : null}
-
-                {apiError ? (
-                  <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
-                    {apiError}
-                  </div>
-                ) : null}
-
-                <div className="flex justify-end">
-                  <Button type="submit" className="rounded-full px-5" disabled={isSubmitting}>
-                    {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                    Find my stay
-                  </Button>
                 </div>
-              </form>
-            </CardContent>
-          </Card>
+              ) : null}
 
-          <CheckoutRecommendationPanel parsedResponse={parsedResponse} isSubmitting={isSubmitting} />
-        </div>
+              {formErrors.length > 0 ? (
+                <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+                  {formErrors.map((error) => (
+                    <p key={error}>{error}</p>
+                  ))}
+                </div>
+              ) : null}
 
-        <CheckoutConciergePanel
-          chatError={chatError}
-          chatMessages={chatMessages}
-          composerValue={composerValue}
-          isChatSending={isChatSending}
-          onChatSubmit={handleChatSubmit}
-          onComposerChange={setComposerValue}
-          onComposerKeyDown={handleComposerKeyDown}
-          onRestart={restartChat}
-          messagesEndRef={messagesEndRef}
-        />
-    </div>
-  );
-}
+              {apiError ? (
+                <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+                  {apiError}
+                </div>
+              ) : null}
 
-function CheckoutRecommendationPanel({
-  parsedResponse,
-  isSubmitting,
-}: {
-  parsedResponse: ParsedOffersResponse | null;
-  isSubmitting: boolean;
-}) {
-  if (isSubmitting) {
-    return (
-      <Card className="border-border/60 bg-white shadow-sm">
-        <CardContent className="flex min-h-[280px] items-center justify-center">
-          <div className="flex items-center gap-3 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Finding the best stay for this request...
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (!parsedResponse) {
-    return (
-      <Card className="border-dashed border-border/70 bg-white/80 shadow-sm">
-          <CardContent className="flex min-h-[280px] flex-col items-center justify-center text-center">
-            <p className="text-lg font-semibold text-foreground">Your guided recommendation will appear here</p>
-            <p className="mt-2 max-w-lg text-sm leading-6 text-muted-foreground">
-            After you enter your dates and guest count, we will show the recommended room, upgrades,
-            and add-ons in a checkout-friendly format.
-            </p>
+              <div className="flex justify-end">
+                <Button type="submit" className="rounded-full px-5" disabled={isSubmitting}>
+                  {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                  Find my stay
+                </Button>
+              </div>
+            </form>
           </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      {parsedResponse.recommendedRoom ? (
-        <DecisionOfferCard title={parsedResponse.recommendedRoom.roomType} offer={parsedResponse.recommendedRoom} />
-      ) : (
-        <Card className="border-amber-300/70 bg-amber-50 shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-base">No stay recommendation yet</CardTitle>
-            <CardDescription>
-              {parsedResponse.fallback?.reason || "No eligible room remained for this request."}
-            </CardDescription>
-          </CardHeader>
         </Card>
-      )}
 
-      <UpgradeLadderSummary entries={parsedResponse.upgradeLadder} />
-      <RecommendedAddOns offers={parsedResponse.recommendedOffers} />
+        <CheckoutRecommendationPanel
+          parsedResponse={parsedResponse}
+          isSubmitting={isSubmitting}
+          selectedRoom={selectedRoom}
+          selectedAddOns={selectedAddOns}
+          currentPricing={currentPricing}
+          isSyncing={isSyncing}
+          syncError={syncError}
+          onSelectRoom={(selection) => void handleRoomSelection(selection)}
+          onToggleAddOn={(bundleType) => void handleToggleAddOn(bundleType)}
+        />
+      </div>
+
+      <CheckoutConciergePanel
+        chatError={chatError}
+        chatMessages={chatMessages}
+        composerValue={composerValue}
+        isChatSending={isChatSending}
+        onChatSubmit={handleChatSubmit}
+        onComposerChange={setComposerValue}
+        onComposerKeyDown={handleComposerKeyDown}
+        onRestart={restartChat}
+        messagesEndRef={messagesEndRef}
+      />
     </div>
-  );
-}
-
-function UpgradeLadderSummary({ entries }: { entries: UpgradeLadderEntry[] }) {
-  return (
-    <Card className="border-border/60 bg-white shadow-sm">
-      <CardHeader>
-        <CardTitle className="text-base">Upgrades</CardTitle>
-        <CardDescription>See the next room up if you want more space or more premium options.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {entries.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No higher room categories were returned above the recommended stay.</p>
-        ) : (
-          <div className="space-y-3">
-            {entries.map((entry) => {
-              const upgradeReasons = entry.reasons.length > 0 ? entry.reasons : entry.benefitSummary;
-
-              return (
-                <div key={`${entry.roomTypeId}-${entry.ratePlanId}`} className="rounded-3xl border border-border/70 bg-slate-50 p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="font-medium text-foreground">{entry.roomType}</p>
-                    <p className="text-sm text-muted-foreground">{entry.ratePlan}</p>
-                  </div>
-                  <div className="text-right text-sm">
-                    <p className="font-semibold text-foreground">{formatMoney(entry.totalPrice)}</p>
-                    <p className="text-muted-foreground">
-                      +{formatMoney(entry.priceDeltaPerNight)}/night
-                    </p>
-                  </div>
-                </div>
-                {upgradeReasons.length > 0 ? (
-                  <div className="mt-3 border-t border-border/60 pt-3">
-                    <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Why upgrade</p>
-                    <ul className="list-disc pl-4 text-xs text-muted-foreground">
-                      {upgradeReasons.map((reason) => (
-                        <li key={`${entry.ratePlanId}-${reason}`}>{reason}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-              </div>
-              );
-            })}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function RecommendedAddOns({ offers }: { offers: RecommendedUpsell[] }) {
-  return (
-    <Card className="border-border/60 bg-white shadow-sm">
-      <CardHeader>
-        <CardTitle className="text-base">Recommended add-ons</CardTitle>
-      </CardHeader>
-      <CardContent>
-        {offers.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No add-ons were recommended for this stay.</p>
-        ) : (
-          <div className="grid gap-3 md:grid-cols-2">
-            {offers.map((offer) => (
-              <div key={`${offer.bundleType}-${offer.label}`} className="rounded-3xl border border-border/70 bg-slate-50 p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <p className="font-medium text-foreground">{offer.label}</p>
-                  {offer.estimatedPriceDelta !== null ? (
-                    <span className="text-sm font-semibold text-foreground">{formatMoney(offer.estimatedPriceDelta)}</span>
-                  ) : null}
-                </div>
-                {offer.reasons.length > 0 ? (
-                  <p className="mt-3 text-sm text-muted-foreground">{offer.reasons.join(" • ")}</p>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
   );
 }
 

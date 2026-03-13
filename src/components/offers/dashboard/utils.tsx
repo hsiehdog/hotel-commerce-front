@@ -48,7 +48,7 @@ export function asRecord(value: unknown): Record<string, unknown> {
   return {};
 }
 
-export function formatMoney(value: number | null): string {
+export function formatMoney(value: number | null, currency = "USD"): string {
   if (value === null || Number.isNaN(value)) {
     return "n/a";
   }
@@ -57,7 +57,7 @@ export function formatMoney(value: number | null): string {
 
   return new Intl.NumberFormat("en-US", {
     style: "currency",
-    currency: "USD",
+    currency,
     minimumFractionDigits: hasCents ? 2 : 0,
     maximumFractionDigits: hasCents ? 2 : 0,
   }).format(value);
