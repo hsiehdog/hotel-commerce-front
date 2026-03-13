@@ -6,6 +6,7 @@ import type { RecommendedRoom } from "@/lib/offers-demo";
 
 const offer: RecommendedRoom = {
   roomType: "Family Suite",
+  roomDescription: "A larger suite with a separate living area for families.",
   ratePlan: "Flexible Rate",
   nightlyPrice: 329,
   totalPrice: 987,
@@ -48,6 +49,7 @@ describe("DecisionOfferCard", () => {
     expect(screen.queryByText("Parking Fee Total")).toBeNull();
     expect(screen.queryByText("Add-ons (est.)")).toBeNull();
     expect(screen.queryByText("Score")).toBeNull();
+    expect(screen.getByText("A larger suite with a separate living area for families.")).toBeTruthy();
     expect(screen.getByText("Strong fit")).toBeTruthy();
     expect(screen.getByText("Only 2 left")).toBeTruthy();
   });

@@ -57,6 +57,10 @@ export function DecisionOfferCard({ title, offer }: DecisionOfferCardProps) {
           </div>
         </div>
 
+        {offer.roomDescription ? (
+          <p className="text-xs text-foreground">{offer.roomDescription}</p>
+        ) : null}
+
         {offer.reasons.length > 0 ? (
           <div>
             <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Why this room</p>

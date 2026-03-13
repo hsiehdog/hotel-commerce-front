@@ -11,6 +11,7 @@ import type {
 
 const room: RecommendedRoom = {
   roomType: "Family Suite",
+  roomDescription: "A larger suite with a separate living area for families.",
   ratePlan: "Flexible Rate",
   nightlyPrice: 329,
   totalPrice: 987,
@@ -41,6 +42,7 @@ const upgradeLadder: UpgradeLadderEntry[] = [
   {
     roomTypeId: "rt_bunk_suite",
     roomType: "Bunk Suite",
+    roomDescription: "A suite layout with extra sleeping space and room to spread out.",
     ratePlanId: "rp_suite_standard",
     ratePlan: "Standard Rate - Suites",
     totalPrice: 598,
@@ -73,7 +75,9 @@ describe("DecisionSummary", () => {
 
     expect(screen.getAllByText("Recommended Room").length).toBeGreaterThan(0);
     expect(screen.getByText("Upgrade Ladder")).toBeTruthy();
+    expect(screen.getByText("A larger suite with a separate living area for families.")).toBeTruthy();
     expect(screen.getByText("Bunk Suite | Standard Rate - Suites")).toBeTruthy();
+    expect(screen.getByText("A suite layout with extra sleeping space and room to spread out.")).toBeTruthy();
     expect(screen.getByText("Only $70 more per night than your current option")).toBeTruthy();
     expect(screen.getByText("Recommended Upsells")).toBeTruthy();
     expect(screen.getByText("Breakfast package")).toBeTruthy();

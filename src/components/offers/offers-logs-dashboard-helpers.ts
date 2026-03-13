@@ -256,6 +256,7 @@ export function buildRoomFallbackFromRow(
 
   return {
     roomType,
+    roomDescription: "",
     ratePlan,
     nightlyPrice: null,
     totalPrice: total,

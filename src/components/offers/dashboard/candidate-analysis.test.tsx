@@ -14,6 +14,7 @@ function buildParsedResponse(): ParsedOffersResponse {
     personaConfidence: {},
     recommendedRoom: {
       roomType: "Accessible King Room",
+      roomDescription: "",
       ratePlan: "Flexible",
       nightlyPrice: 140,
       totalPrice: 283.36,

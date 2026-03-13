@@ -206,6 +206,7 @@ export class OffersRequestError extends Error {
 
 export type RecommendedRoom = {
   roomType: string;
+  roomDescription: string;
   ratePlan: string;
   nightlyPrice: number | null;
   totalPrice: number | null;
@@ -233,6 +234,7 @@ export type RecommendedUpsell = {
 export type UpgradeLadderEntry = {
   roomTypeId: string;
   roomType: string;
+  roomDescription: string;
   ratePlanId: string;
   ratePlan: string;
   totalPrice: number | null;
@@ -556,6 +558,7 @@ function parseRecommendedRoom(value: unknown): RecommendedRoom | null {
 
   return {
     roomType: toStringOrFallback(value.room_type, "-"),
+    roomDescription: toStringOrFallback(value.room_description, ""),
     ratePlan: toStringOrFallback(value.rate_plan, "-"),
     nightlyPrice: firstNumber(value.nightly_price),
     totalPrice: firstNumber(value.total_price),
@@ -596,6 +599,7 @@ function parseUpgradeLadder(value: unknown): UpgradeLadderEntry[] {
     return {
       roomTypeId: toStringOrFallback(row.room_type_id, ""),
       roomType: toStringOrFallback(row.room_type, "-"),
+      roomDescription: toStringOrFallback(row.room_description, ""),
       ratePlanId: toStringOrFallback(row.rate_plan_id, ""),
       ratePlan: toStringOrFallback(row.rate_plan, "-"),
       totalPrice: firstNumber(row.total_price),

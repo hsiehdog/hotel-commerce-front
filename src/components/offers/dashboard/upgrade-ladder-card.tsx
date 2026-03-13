@@ -57,6 +57,10 @@ function UpgradeLadderEntryCard({ entry }: { entry: UpgradeLadderEntry }) {
         </div>
       </div>
 
+      {entry.roomDescription ? (
+        <p className="mt-3 text-xs text-foreground">{entry.roomDescription}</p>
+      ) : null}
+
       {upgradeReasons.length > 0 ? (
         <div className="mt-3 border-t pt-3">
           <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">

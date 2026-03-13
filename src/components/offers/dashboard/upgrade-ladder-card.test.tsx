@@ -7,6 +7,7 @@ import type { UpgradeLadderEntry } from "@/lib/offers-demo";
 const baseEntry: UpgradeLadderEntry = {
   roomTypeId: "rt_bunk_suite",
   roomType: "Bunk Suite",
+  roomDescription: "A suite layout with extra sleeping space and room to spread out.",
   ratePlanId: "rp_suite_standard",
   ratePlan: "Standard Rate - Suites",
   totalPrice: 598,
@@ -23,6 +24,7 @@ describe("UpgradeLadderCard", () => {
   it("prefers reasons over benefit summary", () => {
     render(<UpgradeLadderCard entries={[baseEntry]} />);
 
+    expect(screen.getByText("A suite layout with extra sleeping space and room to spread out.")).toBeTruthy();
     expect(screen.getByText("Only $70 more per night than your current option")).toBeTruthy();
     expect(screen.queryByText("Suite-level upgrade with more living space")).toBeNull();
     expect(screen.queryByText("Nightly: $299")).toBeNull();

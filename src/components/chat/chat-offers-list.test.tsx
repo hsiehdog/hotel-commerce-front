@@ -6,6 +6,7 @@ import type { RecommendedRoom } from "@/lib/offers-demo";
 
 const recommendedRoom: RecommendedRoom = {
   roomType: "Family Suite",
+  roomDescription: "A larger suite with a separate living area for families.",
   ratePlan: "Flexible Rate",
   nightlyPrice: 329,
   totalPrice: 987,
@@ -28,6 +29,7 @@ describe("ChatOffersList", () => {
 
     expect(screen.getByText("Recommended Room")).toBeTruthy();
     expect(screen.getByText("Family Suite | Flexible Rate")).toBeTruthy();
+    expect(screen.getByText("A larger suite with a separate living area for families.")).toBeTruthy();
     expect(screen.getByText("$987")).toBeTruthy();
     expect(screen.getByText("Why this room")).toBeTruthy();
   });

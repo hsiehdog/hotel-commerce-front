@@ -116,6 +116,7 @@ describe("offers response parser", () => {
         configVersion: 1,
         recommended_room: {
           room_type: "Family Suite",
+          room_description: "A larger suite with a separate living area for families.",
           rate_plan: "Flexible Rate",
           nightly_price: 329,
           total_price: 987,
@@ -150,6 +151,7 @@ describe("offers response parser", () => {
           {
             room_type_id: "rt_bunk_suite",
             room_type: "Bunk Suite",
+            room_description: "A suite layout with extra sleeping space and room to spread out.",
             rate_plan_id: "rp_suite_standard",
             rate_plan: "Standard Rate - Suites",
             total_price: 598,
@@ -182,6 +184,7 @@ describe("offers response parser", () => {
 
     expect(parsed.propertyId).toBe("demo_property");
     expect(parsed.recommendedRoom?.roomType).toBe("Family Suite");
+    expect(parsed.recommendedRoom?.roomDescription).toBe("A larger suite with a separate living area for families.");
     expect(parsed.recommendedRoom?.ratePlan).toBe("Flexible Rate");
     expect(parsed.recommendedRoom?.pricingBreakdown.subtotal).toBe(760);
     expect(parsed.recommendedRoom?.pricingBreakdown.taxesAndFees).toBe(102);
@@ -193,6 +196,7 @@ describe("offers response parser", () => {
     expect(parsed.upgradeLadder[0]).toEqual({
       roomTypeId: "rt_bunk_suite",
       roomType: "Bunk Suite",
+      roomDescription: "A suite layout with extra sleeping space and room to spread out.",
       ratePlanId: "rp_suite_standard",
       ratePlan: "Standard Rate - Suites",
       totalPrice: 598,
